@@ -3,142 +3,144 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LedSign IL - אבחון מסך LED</title>
+  <title>LedSign IL - אבחון</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, sans-serif; background: #0a0a0a; color: #fff; direction: rtl; height: 100vh; overflow: hidden; }
-    .screen { display: none; height: 100vh; flex-direction: column; overflow-y: auto; }
-    .screen.active { display: flex; }
-    #splash { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); justify-content: center; align-items: center; }
-    .splash-content { text-align: center; padding: 40px 20px; max-width: 400px; }
-    .logo { font-size: 64px; margin-bottom: 16px; }
-    h1 { font-size: 36px; color: #4fc3f7; margin-bottom: 8px; }
-    .tagline { color: #90caf9; margin-bottom: 32px; font-size: 14px; }
-    button { background: linear-gradient(135deg, #4fc3f7, #0288d1); color: white; border: none; padding: 16px 36px; border-radius: 50px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s; width: 100%; margin-bottom: 12px; }
+    body { font-family: -apple-system, sans-serif; background: #0a0a0a; color: #fff; direction: rtl; min-height: 100vh; }
+    #splash { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); min-height: 100vh; display: flex; justify-content: center; align-items: flex-start; padding: 20px; }
+    .splash-content { text-align: center; padding: 30px 20px; max-width: 420px; width: 100%; }
+    .logo { font-size: 56px; margin-bottom: 12px; }
+    h1 { font-size: 30px; color: #4fc3f7; margin-bottom: 6px; }
+    .tagline { color: #90caf9; margin-bottom: 24px; font-size: 13px; }
+    button { background: linear-gradient(135deg, #4fc3f7, #0288d1); color: white; border: none; padding: 14px 32px; border-radius: 50px; font-size: 15px; font-weight: 700; cursor: pointer; width: 100%; margin-bottom: 10px; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    button.diagnostic { background: linear-gradient(135deg, #ff9800, #f57c00); }
-    .info { background: rgba(79,195,247,0.1); border: 1px solid #4fc3f7; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 12px; text-align: right; line-height: 1.6; }
-    .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; font-size: 12px; word-break: break-all; direction: ltr; text-align: left; }
+    .error { color: #f44336; margin-top: 12px; background: rgba(244,67,54,0.1); padding: 10px; border-radius: 8px; font-size: 11px; word-break: break-all; direction: ltr; text-align: left; }
     .hidden { display: none !important; }
-    .connecting { color: #90caf9; margin-top: 16px; font-size: 14px; }
-    .results { margin-top: 20px; background: rgba(76,175,80,0.1); border: 1px solid #4caf50; border-radius: 8px; padding: 16px; text-align: right; }
-    .results h3 { color: #4caf50; margin-bottom: 12px; font-size: 16px; }
-    .results pre { background: #000; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 11px; direction: ltr; text-align: left; line-height: 1.4; }
+    .connecting { color: #90caf9; margin-top: 12px; font-size: 13px; }
+    .results { margin-top: 16px; background: rgba(76,175,80,0.1); border: 1px solid #4caf50; border-radius: 8px; padding: 14px; text-align: right; }
+    .results h3 { color: #4caf50; margin-bottom: 10px; font-size: 15px; }
+    .results pre { background: #000; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 10px; direction: ltr; text-align: left; line-height: 1.4; max-height: 350px; overflow-y: auto; white-space: pre-wrap; }
+    .warn { background: rgba(255,152,0,0.1); border: 1px solid #ff9800; border-radius: 8px; padding: 10px; margin-top: 12px; font-size: 12px; color: #ffcc80; }
   </style>
 </head>
 <body>
-  <div id="splash" class="screen active">
+  <div id="splash">
     <div class="splash-content">
       <div class="logo">💡</div>
       <h1>LedSign IL</h1>
-      <p class="tagline">מצב אבחון - גילוי UUIDs</p>
-      
+      <p class="tagline">אבחון BLE - גילוי UUIDs</p>
+
       <button id="diagnosticBtn" onclick="runDiagnostic()">🔍 אבחן מסך LED</button>
-      
-      <div class="info">
-        <strong>מצב אבחון:</strong><br>
-        כפתור זה יחבר למסך ה-LED ויציג את כל ה-UUIDs שהמכשיר מפרסם.<br><br>
-        לחץ על הכפתור, בחר את המסך שלך מהרשימה, והמערכת תציג את המידע הטכני הנדרש.
-      </div>
-      
-      <div id="connectingMsg" class="connecting hidden">מחפש מכשיר...</div>
+
+      <div id="connectingMsg" class="connecting hidden">מחפש...</div>
       <div id="errorMsg" class="error hidden"></div>
       <div id="results" class="results hidden"></div>
     </div>
   </div>
 
   <script>
+    // ALL possible service UUIDs - including FFE0 which is common in cheap BLE modules
+    const ALL_SERVICES = [
+      '0000ffe0-0000-1000-8000-00805f9b34fb',  // Common cheap BLE (HM-10, HC-08)
+      '0000ffe5-0000-1000-8000-00805f9b34fb',  // Some LED controllers
+      '0000fa00-0000-1000-8000-00805f9b34fb',  // iPIXEL service
+      '0000fa01-0000-1000-8000-00805f9b34fb',
+      '0000fa02-0000-1000-8000-00805f9b34fb',
+      '0000fa03-0000-1000-8000-00805f9b34fb',
+      '0000fff0-0000-1000-8000-00805f9b34fb',
+      '0000fff1-0000-1000-8000-00805f9b34fb',
+      '0000fff2-0000-1000-8000-00805f9b34fb',
+      '0000fff3-0000-1000-8000-00805f9b34fb',
+      '0000fff4-0000-1000-8000-00805f9b34fb',
+      '0000fff5-0000-1000-8000-00805f9b34fb',
+      '0000ffd0-0000-1000-8000-00805f9b34fb',
+      '0000ffd5-0000-1000-8000-00805f9b34fb',
+      '6e400001-b5a3-f393-e0a9-e50e24dcca9e',  // Nordic UART
+    ];
+
     async function runDiagnostic() {
       const btn = document.getElementById('diagnosticBtn');
       const errEl = document.getElementById('errorMsg');
       const connEl = document.getElementById('connectingMsg');
       const resultsEl = document.getElementById('results');
-      
+
       btn.disabled = true;
       errEl.classList.add('hidden');
       resultsEl.classList.add('hidden');
       connEl.classList.remove('hidden');
-      connEl.textContent = 'מחפש מכשירים...';
-      
+      connEl.textContent = 'בחר מסך מהרשימה...';
+
       try {
-        // Step 1: Request device with acceptAllDevices
-        connEl.textContent = 'בחר את מסך ה-LED שלך מהרשימה...';
         const device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: [
-            // All possible UUIDs we might need
-            '0000fa00-0000-1000-8000-00805f9b34fb',
-            '0000fa01-0000-1000-8000-00805f9b34fb',
-            '0000fa02-0000-1000-8000-00805f9b34fb',
-            '0000fa03-0000-1000-8000-00805f9b34fb',
-            '0000fff0-0000-1000-8000-00805f9b34fb',
-            '0000ffe0-0000-1000-8000-00805f9b34fb',
-            '0000ffe5-0000-1000-8000-00805f9b34fb',
-            '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
-          ]
+          optionalServices: ALL_SERVICES
         });
-        
+
         connEl.textContent = 'מתחבר ל-' + device.name + '...';
-        
-        // Step 2: Connect to GATT server
         const server = await device.gatt.connect();
-        connEl.textContent = 'מקבל מידע על שירותים...';
-        
-        // Step 3: Get all primary services
-        const services = await server.getPrimaryServices();
-        
-        if (services.length === 0) {
-          throw new Error('המכשיר לא מפרסם שירותים!');
+        connEl.textContent = 'סורק שירותים...';
+
+        let output = `<h3>🔌 מכשיר: ${device.name}</h3>`;
+        let log = `Device: ${device.name}\nID: ${device.id}\n\n`;
+
+        // Try getPrimaryServices first
+        let services = [];
+        try {
+          services = await server.getPrimaryServices();
+          log += `getPrimaryServices() returned: ${services.length} services\n\n`;
+        } catch(e) {
+          log += `getPrimaryServices() error: ${e.message}\n\n`;
         }
-        
-        // Step 4: Build results
-        let output = `<h3>✅ נמצאו ${services.length} שירותים</h3>`;
-        output += `<strong>שם המכשיר:</strong> ${device.name}<br>`;
-        output += `<strong>מזהה:</strong> ${device.id}<br><br>`;
-        
-        let detailedInfo = '';
-        
-        for (let i = 0; i < services.length; i++) {
-          const svc = services[i];
-          detailedInfo += `\n=== שירות ${i + 1} ===\n`;
-          detailedInfo += `UUID: ${svc.uuid}\n`;
-          
-          try {
-            const chars = await svc.getCharacteristics();
-            detailedInfo += `Characteristics: ${chars.length}\n`;
-            
-            for (const char of chars) {
-              detailedInfo += `  - ${char.uuid}\n`;
-              detailedInfo += `    Properties: `;
-              if (char.properties.read) detailedInfo += 'READ ';
-              if (char.properties.write) detailedInfo += 'WRITE ';
-              if (char.properties.writeWithoutResponse) detailedInfo += 'WRITE_NO_RESP ';
-              if (char.properties.notify) detailedInfo += 'NOTIFY ';
-              if (char.properties.indicate) detailedInfo += 'INDICATE ';
-              detailedInfo += `\n`;
+
+        if (services.length > 0) {
+          log += `=== ALL SERVICES ===\n`;
+          for (const svc of services) {
+            log += `\nSERVICE: ${svc.uuid}\n`;
+            try {
+              const chars = await svc.getCharacteristics();
+              for (const c of chars) {
+                let props = [];
+                if (c.properties.read) props.push('READ');
+                if (c.properties.write) props.push('WRITE');
+                if (c.properties.writeWithoutResponse) props.push('WRITE_NO_RESP');
+                if (c.properties.notify) props.push('NOTIFY');
+                log += `  CHAR: ${c.uuid} [${props.join(', ')}]\n`;
+              }
+            } catch(e) {
+              log += `  (error getting chars: ${e.message})\n`;
             }
-          } catch (e) {
-            detailedInfo += `    Error getting characteristics: ${e.message}\n`;
+          }
+        } else {
+          // Try each known service UUID directly
+          log += `getPrimaryServices() empty - trying known UUIDs directly:\n\n`;
+          for (const uuid of ALL_SERVICES) {
+            try {
+              const svc = await server.getPrimaryService(uuid);
+              log += `\n✅ FOUND SERVICE: ${uuid}\n`;
+              const chars = await svc.getCharacteristics();
+              for (const c of chars) {
+                let props = [];
+                if (c.properties.read) props.push('READ');
+                if (c.properties.write) props.push('WRITE');
+                if (c.properties.writeWithoutResponse) props.push('WRITE_NO_RESP');
+                if (c.properties.notify) props.push('NOTIFY');
+                log += `  CHAR: ${c.uuid} [${props.join(', ')}]\n`;
+              }
+            } catch(e) {
+              log += `❌ ${uuid}: not found\n`;
+            }
           }
         }
-        
-        output += `<pre>${detailedInfo}</pre>`;
-        
-        output += `<br><strong>הוראות:</strong><br>`;
-        output += `העתק את כל המידע למעלה ושתף עם המפתח.<br>`;
-        output += `חפש את ה-UUID שמכיל "fa02" או "ffe" - זה ככל הנראה ה-write characteristic.`;
-        
+
+        output += `<pre>${log}</pre>`;
         resultsEl.innerHTML = output;
         resultsEl.classList.remove('hidden');
-        
-        // Disconnect
         device.gatt.disconnect();
-        btn.disabled = false;
-        connEl.classList.add('hidden');
-        
-      } catch (e) {
+
+      } catch(e) {
         errEl.textContent = 'שגיאה: ' + e.message;
         errEl.classList.remove('hidden');
+      } finally {
         btn.disabled = false;
         connEl.classList.add('hidden');
       }
