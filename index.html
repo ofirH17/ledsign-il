@@ -27,7 +27,7 @@
     .sign-icon { font-size: 36px; margin-bottom: 8px; }
     .brightness-section { padding: 16px 20px; border-top: 1px solid #1a1a1a; }
     input[type=range] { width: 100%; accent-color: #4fc3f7; }
-    .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; }
+    .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; font-size: 13px; }
     .hidden { display: none !important; }
     .connecting { color: #90caf9; margin-top: 16px; font-size: 14px; }
   </style>
@@ -61,18 +61,18 @@
   </div>
 
   <script>
-    const UUID_SERVICE = '0000fa00-0000-1000-8000-00805f9b34fb';
-    const UUID_WRITE   = '0000fa02-0000-1000-8000-00805f9b34fb';
+    // UUID of the WRITE characteristic (known from protocol docs)
+    const UUID_WRITE = '0000fa02-0000-1000-8000-00805f9b34fb';
 
     const SIGNS = [
-      { label: 'נהג חדש',      icon: '🅿️', color: '#e53935', text: 'נהג חדש',      buffer: 1 },
-      { label: 'תינוק ברכב',   icon: '👶', color: '#1565c0', text: 'תינוק ברכב',   buffer: 2 },
-      { label: 'חניית נכה',    icon: '♿', color: '#6a1b9a', text: 'חניית נכה',    buffer: 3 },
-      { label: 'רכב חירום',    icon: '🚨', color: '#e65100', text: 'רכב חירום',    buffer: 4 },
-      { label: 'עצרו האלימות', icon: '✋', color: '#1b5e20', text: 'עצרו!',         buffer: 5 },
-      { label: 'שבת שלום',     icon: '✡️', color: '#0d47a1', text: 'שבת שלום',     buffer: 6 },
-      { label: 'חג שמח',       icon: '🎉', color: '#880e4f', text: 'חג שמח',       buffer: 7 },
-      { label: 'כוס קפה',      icon: '☕', color: '#4e342e', text: 'עצור! קפה',    buffer: 0 },
+      { label: 'נהג חדש',      icon: '🅿️', color: '#e53935', text: 'נהג חדש',    buffer: 1 },
+      { label: 'תינוק ברכב',   icon: '👶', color: '#1565c0', text: 'תינוק ברכב', buffer: 2 },
+      { label: 'חניית נכה',    icon: '♿', color: '#6a1b9a', text: 'חניית נכה',  buffer: 3 },
+      { label: 'רכב חירום',    icon: '🚨', color: '#e65100', text: 'רכב חירום',  buffer: 4 },
+      { label: 'עצרו האלימות', icon: '✋', color: '#1b5e20', text: 'עצרו!',       buffer: 5 },
+      { label: 'שבת שלום',     icon: '✡️', color: '#0d47a1', text: 'שבת שלום',   buffer: 6 },
+      { label: 'חג שמח',       icon: '🎉', color: '#880e4f', text: 'חג שמח',     buffer: 7 },
+      { label: 'כוס קפה',      icon: '☕', color: '#4e342e', text: 'עצור! קפה',  buffer: 0 },
     ];
 
     let device = null;
@@ -99,21 +99,63 @@
       btn.disabled = true;
       errEl.classList.add('hidden');
       connEl.classList.remove('hidden');
+      connEl.textContent = 'מחפש מכשיר...';
 
       try {
+        // Request device - accept all devices, declare the write UUID as optional service
         device = await navigator.bluetooth.requestDevice({
-          filters: [{ namePrefix: 'LED_BLE_' }, { namePrefix: 'iPixel' }],
-          optionalServices: [UUID_SERVICE, '0000fa00-0000-1000-8000-00805f9b34fb']
+          filters: [
+            { namePrefix: 'LED_BLE_' },
+            { namePrefix: 'iPixel' },
+            { namePrefix: 'LED_' }
+          ],
+          optionalServices: [UUID_WRITE]
         });
 
         connEl.textContent = 'מתחבר ל-' + device.name + '...';
 
+        // Connect to GATT server
         const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(UUID_SERVICE);
-        writeChar = await service.getCharacteristic(UUID_WRITE);
+
+        connEl.textContent = 'מחפש שירותים...';
+
+        // Discover ALL services (no UUID filter)
+        const services = await server.getPrimaryServices();
+
+        // Find the characteristic by UUID across all services
+        writeChar = null;
+        for (const service of services) {
+          try {
+            const chars = await service.getCharacteristics();
+            for (const char of chars) {
+              if (char.uuid === UUID_WRITE) {
+                writeChar = char;
+                break;
+              }
+            }
+            if (writeChar) break;
+          } catch (e) {
+            // Try next service
+          }
+        }
+
+        // Fallback: try direct access if discovered via optionalServices
+        if (!writeChar) {
+          for (const service of services) {
+            try {
+              writeChar = await service.getCharacteristic(UUID_WRITE);
+              if (writeChar) break;
+            } catch (e) {
+              // Try next service
+            }
+          }
+        }
+
+        if (!writeChar) {
+          throw new Error('לא נמצא ה-characteristic. UUID: ' + UUID_WRITE + ' | שירותים שנמצאו: ' + services.map(s => s.uuid).join(', '));
+        }
 
         device.addEventListener('gattserverdisconnected', onDisconnected);
-
         document.getElementById('deviceName').textContent = device.name;
         showMain();
         selectSign(currentSign);
@@ -129,14 +171,20 @@
 
     async function onDisconnected() {
       writeChar = null;
-      // Try to reconnect automatically
       try {
         const server = await device.gatt.connect();
-        const service = await server.getPrimaryService(UUID_SERVICE);
-        writeChar = await service.getCharacteristic(UUID_WRITE);
+        const services = await server.getPrimaryServices();
+        for (const service of services) {
+          try {
+            const chars = await service.getCharacteristics();
+            for (const char of chars) {
+              if (char.uuid === UUID_WRITE) { writeChar = char; break; }
+            }
+            if (writeChar) break;
+          } catch (e) {}
+        }
       } catch (e) {
-        // Reconnect failed - go back to splash
-        document.getElementById('errorMsg').textContent = 'החיבור נותק. ' + e.message;
+        document.getElementById('errorMsg').textContent = 'החיבור נותק: ' + e.message;
         document.getElementById('errorMsg').classList.remove('hidden');
         document.getElementById('connectBtn').disabled = false;
         document.getElementById('splash').classList.add('active');
@@ -147,6 +195,7 @@
     function disconnect() {
       if (device && device.gatt.connected) device.gatt.disconnect();
       writeChar = null;
+      device = null;
       document.getElementById('connectBtn').disabled = false;
       document.getElementById('splash').classList.add('active');
       document.getElementById('main').classList.remove('active');
@@ -157,8 +206,16 @@
       try {
         if (!device.gatt.connected) {
           const server = await device.gatt.connect();
-          const service = await server.getPrimaryService(UUID_SERVICE);
-          writeChar = await service.getCharacteristic(UUID_WRITE);
+          const services = await server.getPrimaryServices();
+          for (const service of services) {
+            try {
+              const chars = await service.getCharacteristics();
+              for (const char of chars) {
+                if (char.uuid === UUID_WRITE) { writeChar = char; break; }
+              }
+              if (writeChar) break;
+            } catch (e) {}
+          }
         }
         await writeChar.writeValueWithoutResponse(new Uint8Array(bytes));
       } catch (e) {
