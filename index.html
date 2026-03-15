@@ -82,13 +82,7 @@
       try {
         setStatus('מחפש מסך LED...');
         device = await navigator.bluetooth.requestDevice({
-          filters: [
-            { namePrefix: 'LED' },
-            { namePrefix: 'led' },
-            { namePrefix: 'LEDBLE' },
-            { namePrefix: 'LED_BLE' }
-          ],
-          optionalServices: [
+          acceptAllDevices: true,         optionalServices: [
             UUID_SERVICE,
             UUID_WRITE,
             UUID_NOTIFY,
