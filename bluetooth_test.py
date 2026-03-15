@@ -32,7 +32,7 @@ async def test_connection(address):
             print(f"✅ Connected: {client.is_connected}")
             
 # Get services
-                        print("\n📋 Discovering services...")
+                                    print("\n📋 iscovering services...")
 services = client.services            
             print(f"\n🎯 Found {len(services)} services:")
             for service in services:
