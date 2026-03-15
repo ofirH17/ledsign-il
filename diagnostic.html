@@ -1,0 +1,77 @@
+diagnostic.html<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bluetooth Diagnostic</title>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a2e; color: #fff; }
+    button { background: #4fc3f7; color: #fff; border: none; padding: 15px 30px; font-size: 16px; cursor: pointer; border-radius: 8px; margin: 10px 0; }
+    button:disabled { opacity: 0.5; }
+    .log { background: #16213e; border: 1px solid #4fc3f7; padding: 15px; margin-top: 20px; font-size: 12px; max-height: 600px; overflow-y: auto; }
+    .log div { margin: 2px 0; padding: 2px; border-left: 2px solid #4fc3f7; padding-left: 8px; }
+    .error { border-left-color: #f44336; color: #ff8a80; }
+    .success { border-left-color: #4caf50; color: #69f0ae; }
+  </style>
+</head>
+<body>
+  <h2>Bluetooth Diagnostic Tool</h2>
+  <button id="btn" onclick="scan()">Scan Device</button>
+  <div class="log" id="log"></div>
+  <script>
+    let dev, srv;
+    function log(msg, cls='') {
+      const d=document.createElement('div');
+      d.className=cls;
+      d.textContent='['+new Date().toLocaleTimeString()+'] '+msg;
+      document.getElementById('log').appendChild(d);
+    }
+    async function scan() {
+      document.getElementById('btn').disabled=true;
+      document.getElementById('log').innerHTML='';
+      try {
+        log('Scanning...');
+        dev = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            '0000fa00-0000-1000-8000-00805f9b34fb',
+            '0000fa02-0000-1000-8000-00805f9b34fb',
+            '0000fa03-0000-1000-8000-00805f9b34fb',
+            '0000ffe0-0000-1000-8000-00805f9b34fb',
+            '0000ffe5-0000-1000-8000-00805f9b34fb'
+          ]
+        });
+        log('Device: '+(dev.name||'no name'),'success');
+        log('ID: '+dev.id);
+        log('Connecting...');
+        srv = await dev.gatt.connect();
+        log('Connected!','success');
+        log('Getting services...');
+        const svcs = await srv.getPrimaryServices();
+        log('Found '+svcs.length+' services','success');
+        for(let i=0;i<svcs.length;i++){
+          const s=svcs[i];
+          log('--- Service #'+(i+1)+' ---');
+          log('UUID: '+s.uuid);
+          try{
+            const chs=await s.getCharacteristics();
+            log('  Characteristics: '+chs.length);
+            for(const c of chs){
+              const p=[];
+              if(c.properties.read)p.push('R');
+              if(c.properties.write)p.push('W');
+              if(c.properties.writeWithoutResponse)p.push('WNR');
+              if(c.properties.notify)p.push('N');
+              log('    '+c.uuid+' ['+p.join(',')+']');
+            }
+          }catch(e){log('  ERR: '+e.message,'error');}
+        }
+        log('DONE! Take screenshot','success');
+      }catch(e){
+        log('ERROR: '+(e.message||e),'error');
+      }
+      document.getElementById('btn').disabled=false;
+    }
+  </script>
+</body>
+</html>
