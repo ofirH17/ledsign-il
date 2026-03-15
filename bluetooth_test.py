@@ -30,9 +30,27 @@ async def test_connection(address):
         async with BleakClient(address, timeout=10.0) as client:
             print(f"✅ Connected: {client.is_connected}")
             
+            # Wait a bit for services to be discovered
+            print("\n⏳ Waiting for service discovery...")
+            await asyncio.sleep(2)
+            
             # Get services
             print("\n📋 Discovering services...")
             services = client.services
+            
+            if not services or len(services) == 0:
+                print("\n⚠️ No services discovered automatically")
+                print("\n🔧 Trying direct write to known UUID...")
+                
+                # Try to write directly even without service discovery
+                try:
+                    test_data = bytes([0x01, 0x00, 0x00])
+                    await client.write_gatt_char(WRITE_UUID, test_data)
+                    print("✅ Direct write successful! Device is working.")
+                    return True
+                except Exception as write_error:
+                    print(f"❌ Direct write failed: {write_error}")
+                    return False
             
             print(f"\n🎯 Found {len(services)} services:")
             for service in services:
@@ -50,16 +68,23 @@ async def test_connection(address):
                 
                 # Try to write a simple test command
                 print("\n✏️ Testing write capability...")
-                test_data = bytes([0x01, 0x00, 0x00])  # Simple test command
+                test_data = bytes([0x01, 0x00, 0x00])
                 await client.write_gatt_char(WRITE_UUID, test_data)
                 print("✅ Write successful!")
             else:
-                print(f"\n⚠️ iPIXEL Service NOT found")
-                print(f"  Expected: {SERVICE_UUID}")
-    
+                print(f"\n⚠️ iPIXEL Service NOT found in discovered services")
+                print(f"   Expected: {SERVICE_UUID}")
+                print("\n🔧 Trying direct write anyway...")
+                try:
+                    test_data = bytes([0x01, 0x00, 0x00])
+                    await client.write_gatt_char(WRITE_UUID, test_data)
+                    print("✅ Direct write successful despite service not being listed!")
+                except Exception as e:
+                    print(f"❌ Direct write failed: {e}")
+            
     except Exception as e:
         print(f"\n❌ Connection error: {type(e).__name__}")
-        print(f"  Details: {str(e)}")
+        print(f"   Details: {str(e)}")
         return False
     
     return True
