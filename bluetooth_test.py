@@ -3,7 +3,6 @@
 Simple Bluetooth connection test for iPIXEL LED display
 Tests direct connection without service discovery
 """
-
 import asyncio
 from bleak import BleakScanner, BleakClient
 
@@ -31,9 +30,10 @@ async def test_connection(address):
         async with BleakClient(address, timeout=10.0) as client:
             print(f"✅ Connected: {client.is_connected}")
             
-# Get services
-                                                print("\n📋 iscovering services...")
-services = client.services            
+            # Get services
+            print("\n📋 Discovering services...")
+            services = client.services
+            
             print(f"\n🎯 Found {len(services)} services:")
             for service in services:
                 print(f"\nService: {service.uuid}")
@@ -49,17 +49,17 @@ services = client.services
                 print(f"\n🎉 iPIXEL Service found: {SERVICE_UUID}")
                 
                 # Try to write a simple test command
-                print("\n✏️  Testing write capability...")
+                print("\n✏️ Testing write capability...")
                 test_data = bytes([0x01, 0x00, 0x00])  # Simple test command
                 await client.write_gatt_char(WRITE_UUID, test_data)
                 print("✅ Write successful!")
             else:
-                print(f"\n⚠️  iPIXEL Service NOT found")
-                print(f"   Expected: {SERVICE_UUID}")
-                
+                print(f"\n⚠️ iPIXEL Service NOT found")
+                print(f"  Expected: {SERVICE_UUID}")
+    
     except Exception as e:
         print(f"\n❌ Connection error: {type(e).__name__}")
-        print(f"   Details: {str(e)}")
+        print(f"  Details: {str(e)}")
         return False
     
     return True
@@ -84,11 +84,11 @@ async def main():
     if ipixel_devices:
         print(f"\n🎯 Found potential iPIXEL device(s):")
         for device in ipixel_devices:
-            print(f"   {device.name} - {device.address}")
+            print(f"  {device.name} - {device.address}")
             await test_connection(device.address)
     else:
-        print("\n⚠️  No iPIXEL-like devices found by name.")
-        print("   Trying first device anyway...")
+        print("\n⚠️ No iPIXEL-like devices found by name.")
+        print("  Trying first device anyway...")
         if devices:
             await test_connection(devices[0].address)
 
