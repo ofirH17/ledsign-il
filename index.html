@@ -3,33 +3,27 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>LedSign IL - פרוטוטייפ</title>
+  <title>LedSign IL - אבחון מסך LED</title>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: -apple-system, sans-serif; background: #0a0a0a; color: #fff; direction: rtl; height: 100vh; overflow: hidden; }
     .screen { display: none; height: 100vh; flex-direction: column; overflow-y: auto; }
     .screen.active { display: flex; }
     #splash { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); justify-content: center; align-items: center; }
-    .splash-content { text-align: center; padding: 40px 20px; }
+    .splash-content { text-align: center; padding: 40px 20px; max-width: 400px; }
     .logo { font-size: 64px; margin-bottom: 16px; }
     h1 { font-size: 36px; color: #4fc3f7; margin-bottom: 8px; }
-    .tagline { color: #90caf9; margin-bottom: 48px; }
-    button { background: linear-gradient(135deg, #4fc3f7, #0288d1); color: white; border: none; padding: 18px 40px; border-radius: 50px; font-size: 18px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+    .tagline { color: #90caf9; margin-bottom: 32px; font-size: 14px; }
+    button { background: linear-gradient(135deg, #4fc3f7, #0288d1); color: white; border: none; padding: 16px 36px; border-radius: 50px; font-size: 16px; font-weight: 700; cursor: pointer; transition: 0.2s; width: 100%; margin-bottom: 12px; }
     button:disabled { opacity: 0.5; cursor: not-allowed; }
-    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #111; border-bottom: 1px solid #222; }
-    .dot { width: 10px; height: 10px; border-radius: 50%; background: #4caf50; display: inline-block; }
-    .preview-section { padding: 16px 20px; text-align: center; }
-    .led-preview { background: #111; border: 2px solid #222; border-radius: 12px; padding: 12px; display: inline-block; }
-    #previewCanvas { display: block; border-radius: 6px; }
-    .signs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
-    .sign-card { background: #1a1a1a; border: 2px solid #2a2a2a; border-radius: 16px; padding: 20px 12px; text-align: center; cursor: pointer; }
-    .sign-card.active { border-color: #4fc3f7; background: rgba(79,195,247,0.1); }
-    .sign-icon { font-size: 36px; margin-bottom: 8px; }
-    .brightness-section { padding: 16px 20px; border-top: 1px solid #1a1a1a; }
-    input[type=range] { width: 100%; accent-color: #4fc3f7; }
-    .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; font-size: 12px; word-break: break-all; }
+    button.diagnostic { background: linear-gradient(135deg, #ff9800, #f57c00); }
+    .info { background: rgba(79,195,247,0.1); border: 1px solid #4fc3f7; border-radius: 8px; padding: 12px; margin-top: 16px; font-size: 12px; text-align: right; line-height: 1.6; }
+    .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; font-size: 12px; word-break: break-all; direction: ltr; text-align: left; }
     .hidden { display: none !important; }
     .connecting { color: #90caf9; margin-top: 16px; font-size: 14px; }
+    .results { margin-top: 20px; background: rgba(76,175,80,0.1); border: 1px solid #4caf50; border-radius: 8px; padding: 16px; text-align: right; }
+    .results h3 { color: #4caf50; margin-bottom: 12px; font-size: 16px; }
+    .results pre { background: #000; padding: 12px; border-radius: 4px; overflow-x: auto; font-size: 11px; direction: ltr; text-align: left; line-height: 1.4; }
   </style>
 </head>
 <body>
@@ -37,218 +31,118 @@
     <div class="splash-content">
       <div class="logo">💡</div>
       <h1>LedSign IL</h1>
-      <p class="tagline">שלטי LED חכמים לרכב</p>
-      <button id="connectBtn" onclick="connectBLE()">🔵 חבר למסך</button>
-      <div id="connectingMsg" class="connecting hidden">מתחבר...</div>
+      <p class="tagline">מצב אבחון - גילוי UUIDs</p>
+      
+      <button id="diagnosticBtn" onclick="runDiagnostic()">🔍 אבחן מסך LED</button>
+      
+      <div class="info">
+        <strong>מצב אבחון:</strong><br>
+        כפתור זה יחבר למסך ה-LED ויציג את כל ה-UUIDs שהמכשיר מפרסם.<br><br>
+        לחץ על הכפתור, בחר את המסך שלך מהרשימה, והמערכת תציג את המידע הטכני הנדרש.
+      </div>
+      
+      <div id="connectingMsg" class="connecting hidden">מחפש מכשיר...</div>
       <div id="errorMsg" class="error hidden"></div>
-    </div>
-  </div>
-
-  <div id="main" class="screen">
-    <header>
-      <div class="status-bar"><span class="dot"></span> <span id="deviceName">מחובר</span></div>
-      <button style="background:none; padding:0" onclick="disconnect()">❌</button>
-    </header>
-    <div class="preview-section">
-      <div style="color:#666; font-size:12px; margin-bottom:8px">מוצג כרגע</div>
-      <div class="led-preview"><canvas id="previewCanvas" width="160" height="160"></canvas></div>
-    </div>
-    <div class="signs-grid" id="grid"></div>
-    <div class="brightness-section">
-      <label style="color:#888; font-size:14px">בהירות: <span id="brightVal">70</span>%</label>
-      <input type="range" min="1" max="100" value="70" oninput="setBrightness(this.value)">
+      <div id="results" class="results hidden"></div>
     </div>
   </div>
 
   <script>
-    const UUID_WRITE  = '0000fa02-0000-1000-8000-00805f9b34fb';
-    const UUID_NOTIFY = '0000fa03-0000-1000-8000-00805f9b34fb';
-
-    // All known iPIXEL service UUIDs - must ALL be listed in optionalServices
-    const ALL_KNOWN_SERVICES = [
-      '0000fa00-0000-1000-8000-00805f9b34fb',
-      '0000fa01-0000-1000-8000-00805f9b34fb',
-      '0000fa02-0000-1000-8000-00805f9b34fb',
-      '0000fa03-0000-1000-8000-00805f9b34fb',
-      '0000fff0-0000-1000-8000-00805f9b34fb',
-      '0000ffe0-0000-1000-8000-00805f9b34fb',
-      '0000ffe5-0000-1000-8000-00805f9b34fb',
-      '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
-    ];
-
-    const SIGNS = [
-      { label: 'נהג חדש',      icon: '🅿️', color: '#e53935', text: 'נהג חדש',    buffer: 1 },
-      { label: 'תינוק ברכב',   icon: '👶', color: '#1565c0', text: 'תינוק ברכב', buffer: 2 },
-      { label: 'חניית נכה',    icon: '♿', color: '#6a1b9a', text: 'חניית נכה',  buffer: 3 },
-      { label: 'רכב חירום',    icon: '🚨', color: '#e65100', text: 'רכב חירום',  buffer: 4 },
-      { label: 'עצרו האלימות', icon: '✋', color: '#1b5e20', text: 'עצרו!',       buffer: 5 },
-      { label: 'שבת שלום',     icon: '✡️', color: '#0d47a1', text: 'שבת שלום',   buffer: 6 },
-      { label: 'חג שמח',       icon: '🎉', color: '#880e4f', text: 'חג שמח',     buffer: 7 },
-      { label: 'כוס קפה',      icon: '☕', color: '#4e342e', text: 'עצור! קפה',  buffer: 0 },
-    ];
-
-    let device = null;
-    let writeChar = null;
-    let currentSign = 0;
-
-    function initGrid() {
-      const grid = document.getElementById('grid');
-      grid.innerHTML = '';
-      SIGNS.forEach((s, i) => {
-        const card = document.createElement('div');
-        card.className = 'sign-card' + (i === currentSign ? ' active' : '');
-        card.innerHTML = `<div class="sign-icon">${s.icon}</div><div style="font-size:13px">${s.label}</div>`;
-        card.onclick = () => selectSign(i);
-        grid.appendChild(card);
-      });
-    }
-
-    async function findWriteChar(server) {
-      // Strategy 1: try known service UUIDs directly
-      for (const svcUUID of ALL_KNOWN_SERVICES) {
-        try {
-          const svc = await server.getPrimaryService(svcUUID);
-          try {
-            const c = await svc.getCharacteristic(UUID_WRITE);
-            if (c) return c;
-          } catch (e) {}
-          // Also enumerate all chars in this service
-          try {
-            const chars = await svc.getCharacteristics();
-            for (const c of chars) {
-              if (c.uuid === UUID_WRITE) return c;
-            }
-          } catch (e) {}
-        } catch (e) {}
-      }
-
-      // Strategy 2: enumerate ALL services
-      try {
-        const services = await server.getPrimaryServices();
-        for (const svc of services) {
-          try {
-            const chars = await svc.getCharacteristics();
-            for (const c of chars) {
-              if (c.uuid === UUID_WRITE) return c;
-            }
-          } catch (e) {}
-        }
-        if (services.length === 0) {
-          throw new Error('המכשיר לא מפרסם שירותים. ייתכן שצריך לכבות ולהדליק את המסך, ואז לנסות שוב.');
-        }
-        // Return service UUIDs for debugging
-        const uuids = services.map(s => s.uuid).join(', ');
-        throw new Error('לא נמצא UUID fa02 בשירותים: ' + uuids);
-      } catch (e) {
-        throw e;
-      }
-    }
-
-    async function connectBLE() {
-      const btn = document.getElementById('connectBtn');
+    async function runDiagnostic() {
+      const btn = document.getElementById('diagnosticBtn');
       const errEl = document.getElementById('errorMsg');
       const connEl = document.getElementById('connectingMsg');
-
+      const resultsEl = document.getElementById('results');
+      
       btn.disabled = true;
       errEl.classList.add('hidden');
+      resultsEl.classList.add('hidden');
       connEl.classList.remove('hidden');
-      connEl.textContent = 'מחפש מכשיר...';
-
+      connEl.textContent = 'מחפש מכשירים...';
+      
       try {
-        device = await navigator.bluetooth.requestDevice({
-          filters: [
-            { namePrefix: 'LED_BLE_' },
-            { namePrefix: 'iPixel' },
-            { namePrefix: 'LED_' }
-          ],
-          optionalServices: ALL_KNOWN_SERVICES
+        // Step 1: Request device with acceptAllDevices
+        connEl.textContent = 'בחר את מסך ה-LED שלך מהרשימה...';
+        const device = await navigator.bluetooth.requestDevice({
+          acceptAllDevices: true,
+          optionalServices: [
+            // All possible UUIDs we might need
+            '0000fa00-0000-1000-8000-00805f9b34fb',
+            '0000fa01-0000-1000-8000-00805f9b34fb',
+            '0000fa02-0000-1000-8000-00805f9b34fb',
+            '0000fa03-0000-1000-8000-00805f9b34fb',
+            '0000fff0-0000-1000-8000-00805f9b34fb',
+            '0000ffe0-0000-1000-8000-00805f9b34fb',
+            '0000ffe5-0000-1000-8000-00805f9b34fb',
+            '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+          ]
         });
-
+        
         connEl.textContent = 'מתחבר ל-' + device.name + '...';
+        
+        // Step 2: Connect to GATT server
         const server = await device.gatt.connect();
-
-        connEl.textContent = 'מחפש characteristic...';
-        writeChar = await findWriteChar(server);
-
-        device.addEventListener('gattserverdisconnected', onDisconnected);
-        document.getElementById('deviceName').textContent = device.name;
-        showMain();
-        selectSign(currentSign);
-
+        connEl.textContent = 'מקבל מידע על שירותים...';
+        
+        // Step 3: Get all primary services
+        const services = await server.getPrimaryServices();
+        
+        if (services.length === 0) {
+          throw new Error('המכשיר לא מפרסם שירותים!');
+        }
+        
+        // Step 4: Build results
+        let output = `<h3>✅ נמצאו ${services.length} שירותים</h3>`;
+        output += `<strong>שם המכשיר:</strong> ${device.name}<br>`;
+        output += `<strong>מזהה:</strong> ${device.id}<br><br>`;
+        
+        let detailedInfo = '';
+        
+        for (let i = 0; i < services.length; i++) {
+          const svc = services[i];
+          detailedInfo += `\n=== שירות ${i + 1} ===\n`;
+          detailedInfo += `UUID: ${svc.uuid}\n`;
+          
+          try {
+            const chars = await svc.getCharacteristics();
+            detailedInfo += `Characteristics: ${chars.length}\n`;
+            
+            for (const char of chars) {
+              detailedInfo += `  - ${char.uuid}\n`;
+              detailedInfo += `    Properties: `;
+              if (char.properties.read) detailedInfo += 'READ ';
+              if (char.properties.write) detailedInfo += 'WRITE ';
+              if (char.properties.writeWithoutResponse) detailedInfo += 'WRITE_NO_RESP ';
+              if (char.properties.notify) detailedInfo += 'NOTIFY ';
+              if (char.properties.indicate) detailedInfo += 'INDICATE ';
+              detailedInfo += `\n`;
+            }
+          } catch (e) {
+            detailedInfo += `    Error getting characteristics: ${e.message}\n`;
+          }
+        }
+        
+        output += `<pre>${detailedInfo}</pre>`;
+        
+        output += `<br><strong>הוראות:</strong><br>`;
+        output += `העתק את כל המידע למעלה ושתף עם המפתח.<br>`;
+        output += `חפש את ה-UUID שמכיל "fa02" או "ffe" - זה ככל הנראה ה-write characteristic.`;
+        
+        resultsEl.innerHTML = output;
+        resultsEl.classList.remove('hidden');
+        
+        // Disconnect
+        device.gatt.disconnect();
+        btn.disabled = false;
+        connEl.classList.add('hidden');
+        
       } catch (e) {
-        errEl.textContent = e.message;
+        errEl.textContent = 'שגיאה: ' + e.message;
         errEl.classList.remove('hidden');
         btn.disabled = false;
-      } finally {
         connEl.classList.add('hidden');
       }
     }
-
-    async function onDisconnected() {
-      writeChar = null;
-      try {
-        const server = await device.gatt.connect();
-        writeChar = await findWriteChar(server);
-      } catch (e) {
-        document.getElementById('errorMsg').textContent = 'החיבור נותק: ' + e.message;
-        document.getElementById('errorMsg').classList.remove('hidden');
-        document.getElementById('connectBtn').disabled = false;
-        document.getElementById('splash').classList.add('active');
-        document.getElementById('main').classList.remove('active');
-      }
-    }
-
-    function disconnect() {
-      if (device && device.gatt.connected) device.gatt.disconnect();
-      writeChar = null; device = null;
-      document.getElementById('connectBtn').disabled = false;
-      document.getElementById('splash').classList.add('active');
-      document.getElementById('main').classList.remove('active');
-    }
-
-    async function sendCommand(bytes) {
-      if (!writeChar) return;
-      try {
-        if (!device.gatt.connected) {
-          const server = await device.gatt.connect();
-          writeChar = await findWriteChar(server);
-        }
-        await writeChar.writeValueWithoutResponse(new Uint8Array(bytes));
-      } catch (e) {
-        console.warn('sendCommand:', e.message);
-      }
-    }
-
-    async function selectSign(idx) {
-      currentSign = idx;
-      document.querySelectorAll('.sign-card').forEach((c, i) => c.classList.toggle('active', i === idx));
-      drawPreview(SIGNS[idx]);
-      if (SIGNS[idx].buffer === 0) await sendCommand([0x05, 0x00, 0x07, 0x01, 0x00]);
-      else await sendCommand([0x05, 0x00, 0x07, 0x80, SIGNS[idx].buffer]);
-    }
-
-    function drawPreview(sign) {
-      const ctx = document.getElementById('previewCanvas').getContext('2d');
-      ctx.fillStyle = sign.color; ctx.fillRect(0,0,160,160);
-      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-      ctx.font = 'bold 30px Arial';
-      if (sign.text.includes(' ')) {
-        const w = sign.text.split(' ');
-        ctx.fillText(w[0], 80, 60); ctx.fillText(w[1], 80, 100);
-      } else ctx.fillText(sign.text, 80, 80);
-    }
-
-    async function setBrightness(v) {
-      document.getElementById('brightVal').textContent = v;
-      await sendCommand([0x05, 0x00, 0x04, 0x80, parseInt(v)]);
-    }
-
-    function showMain() {
-      document.getElementById('splash').classList.remove('active');
-      document.getElementById('main').classList.add('active');
-    }
-
-    initGrid();
   </script>
 </body>
 </html>
