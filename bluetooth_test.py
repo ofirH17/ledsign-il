@@ -38,7 +38,7 @@ async def test_connection(address):
             print("\n📋 Discovering services...")
             services = client.services
             
-            if not services or len(services) == 0:
+                        if not services:
                 print("\n⚠️ No services discovered automatically")
                 print("\n🔧 Trying direct write to known UUID...")
                 
@@ -52,7 +52,7 @@ async def test_connection(address):
                     print(f"❌ Direct write failed: {write_error}")
                     return False
             
-            print(f"\n🎯 Found {len(services)} services:")
+                        print(f"\n🎯 Found {len(list(services))} services:")
             for service in services:
                 print(f"\nService: {service.uuid}")
                 print(f"  Description: {service.description}")
