@@ -31,10 +31,9 @@ async def test_connection(address):
         async with BleakClient(address, timeout=10.0) as client:
             print(f"✅ Connected: {client.is_connected}")
             
-            # Get services
-            print("\n📋 Discovering services...")
-            services = await client.get_services()
-            
+# Get services
+                        print("\n📋 Discovering services...")
+services = client.services            
             print(f"\n🎯 Found {len(services)} services:")
             for service in services:
                 print(f"\nService: {service.uuid}")
