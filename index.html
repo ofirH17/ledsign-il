@@ -1,142 +1,201 @@
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>LedSign IL - פרוטוטייפ</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { font-family: -apple-system, sans-serif; background: #0a0a0a; color: #fff; direction: rtl; height: 100vh; overflow: hidden; }
-        .screen { display: none; height: 100vh; flex-direction: column; overflow-y: auto; }
-        .screen.active { display: flex; }
-        #splash { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); justify-content: center; align-items: center; }
-        .splash-content { text-align: center; padding: 40px 20px; }
-        .logo { font-size: 64px; margin-bottom: 16px; }
-        h1 { font-size: 36px; color: #4fc3f7; margin-bottom: 8px; }
-        .tagline { color: #90caf9; margin-bottom: 48px; }
-        button { background: linear-gradient(135deg, #4fc3f7, #0288d1); color: white; border: none; padding: 18px 40px; border-radius: 50px; font-size: 18px; font-weight: 700; cursor: pointer; transition: 0.2s; }
-        button:disabled { opacity: 0.5; cursor: not-allowed; }
-        header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #111; border-bottom: 1px solid #222; }
-        .dot { width: 10px; height: 10px; border-radius: 50%; background: #4caf50; display: inline-block; }
-        .preview-section { padding: 16px 20px; text-align: center; }
-        .led-preview { background: #111; border: 2px solid #222; border-radius: 12px; padding: 12px; display: inline-block; }
-        #previewCanvas { display: block; border-radius: 6px; }
-        .signs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
-        .sign-card { background: #1a1a1a; border: 2px solid #2a2a2a; border-radius: 16px; padding: 20px 12px; text-align: center; cursor: pointer; }
-        .sign-card.active { border-color: #4fc3f7; background: rgba(79,195,247,0.1); }
-        .sign-icon { font-size: 36px; margin-bottom: 8px; }
-        .brightness-section { padding: 16px 20px; border-top: 1px solid #1a1a1a; }
-        input[type=range] { width: 100%; accent-color: #4fc3f7; }
-        .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; }
-        .hidden { display: none !important; }
-    </style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LedSign IL - פרוטוטייפ</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, sans-serif; background: #0a0a0a; color: #fff; direction: rtl; height: 100vh; overflow: hidden; }
+    .screen { display: none; height: 100vh; flex-direction: column; overflow-y: auto; }
+    .screen.active { display: flex; }
+    #splash { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); justify-content: center; align-items: center; }
+    .splash-content { text-align: center; padding: 40px 20px; }
+    .logo { font-size: 64px; margin-bottom: 16px; }
+    h1 { font-size: 36px; color: #4fc3f7; margin-bottom: 8px; }
+    .tagline { color: #90caf9; margin-bottom: 48px; }
+    button { background: linear-gradient(135deg, #4fc3f7, #0288d1); color: white; border: none; padding: 18px 40px; border-radius: 50px; font-size: 18px; font-weight: 700; cursor: pointer; transition: 0.2s; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    header { display: flex; justify-content: space-between; align-items: center; padding: 16px 20px; background: #111; border-bottom: 1px solid #222; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; background: #4caf50; display: inline-block; }
+    .preview-section { padding: 16px 20px; text-align: center; }
+    .led-preview { background: #111; border: 2px solid #222; border-radius: 12px; padding: 12px; display: inline-block; }
+    #previewCanvas { display: block; border-radius: 6px; }
+    .signs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; }
+    .sign-card { background: #1a1a1a; border: 2px solid #2a2a2a; border-radius: 16px; padding: 20px 12px; text-align: center; cursor: pointer; }
+    .sign-card.active { border-color: #4fc3f7; background: rgba(79,195,247,0.1); }
+    .sign-icon { font-size: 36px; margin-bottom: 8px; }
+    .brightness-section { padding: 16px 20px; border-top: 1px solid #1a1a1a; }
+    input[type=range] { width: 100%; accent-color: #4fc3f7; }
+    .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; }
+    .hidden { display: none !important; }
+    .connecting { color: #90caf9; margin-top: 16px; font-size: 14px; }
+  </style>
 </head>
 <body>
-    <div id="splash" class="screen active">
-        <div class="splash-content">
-            <div class="logo">💡</div>
-            <h1>LedSign IL</h1>
-            <p class="tagline">שלטי LED חכמים לרכב</p>
-            <button id="connectBtn" onclick="connectBLE()">🔵 חבר למסך</button>
-            <div id="scanStatus" class="scan-status hidden">מחפש מכשיר...</div>
-            <div id="errorMsg" class="error hidden"></div>
-        </div>
+  <div id="splash" class="screen active">
+    <div class="splash-content">
+      <div class="logo">💡</div>
+      <h1>LedSign IL</h1>
+      <p class="tagline">שלטי LED חכמים לרכב</p>
+      <button id="connectBtn" onclick="connectBLE()">🔵 חבר למסך</button>
+      <div id="connectingMsg" class="connecting hidden">מתחבר... אנא המתן</div>
+      <div id="errorMsg" class="error hidden"></div>
     </div>
+  </div>
 
-    <div id="main" class="screen">
-        <header>
-            <div class="status-bar"><span class="dot"></span> <span id="deviceName">מחובר</span></div>
-            <button style="background:none; padding:0" onclick="showSettings()">⚙️</button>
-        </header>
-        <div class="preview-section">
-            <div style="color:#666; font-size:12px; margin-bottom:8px">מוצג כרגע</div>
-            <div class="led-preview"><canvas id="previewCanvas" width="160" height="160"></canvas></div>
-        </div>
-        <div class="signs-grid" id="grid"></div>
-        <div class="brightness-section">
-            <label style="color:#888; font-size:14px">בהירות: <span id="brightVal">70</span>%</label>
-            <input type="range" min="1" max="100" value="70" oninput="setBrightness(this.value)">
-        </div>
+  <div id="main" class="screen">
+    <header>
+      <div class="status-bar"><span class="dot"></span> <span id="deviceName">מחובר</span></div>
+      <button style="background:none; padding:0" onclick="disconnect()">❌</button>
+    </header>
+    <div class="preview-section">
+      <div style="color:#666; font-size:12px; margin-bottom:8px">מוצג כרגע</div>
+      <div class="led-preview"><canvas id="previewCanvas" width="160" height="160"></canvas></div>
     </div>
+    <div class="signs-grid" id="grid"></div>
+    <div class="brightness-section">
+      <label style="color:#888; font-size:14px">בהירות: <span id="brightVal">70</span>%</label>
+      <input type="range" min="1" max="100" value="70" oninput="setBrightness(this.value)">
+    </div>
+  </div>
 
-    <script>
-        const UUID_WRITE = '0000fa02-0000-1000-8000-00805f9b34fb';
-        const SIGNS = [
-            { label: 'נהג חדש', icon: '🅿️', color: '#e53935', text: 'נהג חדש', buffer: 1 },
-            { label: 'תינוק ברכב', icon: '👶', color: '#1565c0', text: 'תינוק ברכב', buffer: 2 },
-            { label: 'עצור', icon: '🚨', color: '#b71c1c', text: 'STOP', buffer: 3 },
-            { label: 'תודה', icon: '🙏', color: '#2e7d32', text: 'תודה', buffer: 4 },
-            { label: 'חנייה זמנית', icon: '🅿️', color: '#e65100', text: 'חנייה זמנית', buffer: 5 },
-            { label: 'כיבוי', icon: '⬜', color: '#222', text: '', buffer: 0 }
-        ];
+  <script>
+    const UUID_SERVICE = '0000fa00-0000-1000-8000-00805f9b34fb';
+    const UUID_WRITE   = '0000fa02-0000-1000-8000-00805f9b34fb';
 
-        let bleDevice, writeChar;
+    const SIGNS = [
+      { label: 'נהג חדש',      icon: '🅿️', color: '#e53935', text: 'נהג חדש',      buffer: 1 },
+      { label: 'תינוק ברכב',   icon: '👶', color: '#1565c0', text: 'תינוק ברכב',   buffer: 2 },
+      { label: 'חניית נכה',    icon: '♿', color: '#6a1b9a', text: 'חניית נכה',    buffer: 3 },
+      { label: 'רכב חירום',    icon: '🚨', color: '#e65100', text: 'רכב חירום',    buffer: 4 },
+      { label: 'עצרו האלימות', icon: '✋', color: '#1b5e20', text: 'עצרו!',         buffer: 5 },
+      { label: 'שבת שלום',     icon: '✡️', color: '#0d47a1', text: 'שבת שלום',     buffer: 6 },
+      { label: 'חג שמח',       icon: '🎉', color: '#880e4f', text: 'חג שמח',       buffer: 7 },
+      { label: 'כוס קפה',      icon: '☕', color: '#4e342e', text: 'עצור! קפה',    buffer: 0 },
+    ];
 
-        function initGrid() {
-            const grid = document.getElementById('grid');
-            SIGNS.forEach((s, i) => {
-                const div = document.createElement('div');
-                div.className = 'sign-card';
-                div.id = 'sign-' + i;
-                div.onclick = () => selectSign(i);
-                div.innerHTML = `<div class="sign-icon">${s.icon}</div><div class="sign-label">${s.label}</div>`;
-                grid.appendChild(div);
-            });
+    let device = null;
+    let writeChar = null;
+    let currentSign = 0;
+
+    function initGrid() {
+      const grid = document.getElementById('grid');
+      grid.innerHTML = '';
+      SIGNS.forEach((s, i) => {
+        const card = document.createElement('div');
+        card.className = 'sign-card' + (i === currentSign ? ' active' : '');
+        card.innerHTML = `<div class="sign-icon">${s.icon}</div><div style="font-size:13px">${s.label}</div>`;
+        card.onclick = () => selectSign(i);
+        grid.appendChild(card);
+      });
+    }
+
+    async function connectBLE() {
+      const btn = document.getElementById('connectBtn');
+      const errEl = document.getElementById('errorMsg');
+      const connEl = document.getElementById('connectingMsg');
+
+      btn.disabled = true;
+      errEl.classList.add('hidden');
+      connEl.classList.remove('hidden');
+
+      try {
+        device = await navigator.bluetooth.requestDevice({
+          filters: [{ namePrefix: 'LED_BLE_' }, { namePrefix: 'iPixel' }],
+          optionalServices: [UUID_SERVICE, '0000fa00-0000-1000-8000-00805f9b34fb']
+        });
+
+        connEl.textContent = 'מתחבר ל-' + device.name + '...';
+
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(UUID_SERVICE);
+        writeChar = await service.getCharacteristic(UUID_WRITE);
+
+        device.addEventListener('gattserverdisconnected', onDisconnected);
+
+        document.getElementById('deviceName').textContent = device.name;
+        showMain();
+        selectSign(currentSign);
+
+      } catch (e) {
+        errEl.textContent = e.message;
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+      } finally {
+        connEl.classList.add('hidden');
+      }
+    }
+
+    async function onDisconnected() {
+      writeChar = null;
+      // Try to reconnect automatically
+      try {
+        const server = await device.gatt.connect();
+        const service = await server.getPrimaryService(UUID_SERVICE);
+        writeChar = await service.getCharacteristic(UUID_WRITE);
+      } catch (e) {
+        // Reconnect failed - go back to splash
+        document.getElementById('errorMsg').textContent = 'החיבור נותק. ' + e.message;
+        document.getElementById('errorMsg').classList.remove('hidden');
+        document.getElementById('connectBtn').disabled = false;
+        document.getElementById('splash').classList.add('active');
+        document.getElementById('main').classList.remove('active');
+      }
+    }
+
+    function disconnect() {
+      if (device && device.gatt.connected) device.gatt.disconnect();
+      writeChar = null;
+      document.getElementById('connectBtn').disabled = false;
+      document.getElementById('splash').classList.add('active');
+      document.getElementById('main').classList.remove('active');
+    }
+
+    async function sendCommand(bytes) {
+      if (!writeChar) return;
+      try {
+        if (!device.gatt.connected) {
+          const server = await device.gatt.connect();
+          const service = await server.getPrimaryService(UUID_SERVICE);
+          writeChar = await service.getCharacteristic(UUID_WRITE);
         }
+        await writeChar.writeValueWithoutResponse(new Uint8Array(bytes));
+      } catch (e) {
+        console.warn('sendCommand error:', e.message);
+      }
+    }
 
-        async function connectBLE() {
-            try {
-                document.getElementById('scanStatus').classList.remove('hidden');
-                bleDevice = await navigator.bluetooth.requestDevice({
-                    filters: [{ namePrefix: 'LED_BLE' }],
-                    optionalServices: ['0000fa00-0000-1000-8000-00805f9b34fb']
-                });
-                const server = await bleDevice.gatt.connect();
-                const service = await server.getPrimaryService('0000fa00-0000-1000-8000-00805f9b34fb');
-                writeChar = await service.getCharacteristic(UUID_WRITE);
-                
-                await sendCommand([0x05, 0x00, 0x07, 0x01, 0x01]); // Power ON
-                showMain();
-                selectSign(0);
-            } catch (e) {
-                document.getElementById('errorMsg').textContent = e.message;
-                document.getElementById('errorMsg').classList.remove('hidden');
-            }
-        }
+    async function selectSign(idx) {
+      currentSign = idx;
+      document.querySelectorAll('.sign-card').forEach((c, i) => c.classList.toggle('active', i === idx));
+      drawPreview(SIGNS[idx]);
+      if (SIGNS[idx].buffer === 0) await sendCommand([0x05, 0x00, 0x07, 0x01, 0x00]);
+      else await sendCommand([0x05, 0x00, 0x07, 0x80, SIGNS[idx].buffer]);
+    }
 
-        async function sendCommand(bytes) {
-            if (writeChar) await writeChar.writeValueWithoutResponse(new Uint8Array(bytes));
-        }
+    function drawPreview(sign) {
+      const ctx = document.getElementById('previewCanvas').getContext('2d');
+      ctx.fillStyle = sign.color; ctx.fillRect(0,0,160,160);
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.font = 'bold 30px Arial';
+      if (sign.text.includes(' ')) {
+        const w = sign.text.split(' ');
+        ctx.fillText(w[0], 80, 60); ctx.fillText(w[1], 80, 100);
+      } else ctx.fillText(sign.text, 80, 80);
+    }
 
-        async function selectSign(idx) {
-            document.querySelectorAll('.sign-card').forEach((c, i) => c.classList.toggle('active', i === idx));
-            drawPreview(SIGNS[idx]);
-            if (SIGNS[idx].buffer === 0) await sendCommand([0x05, 0x00, 0x07, 0x01, 0x00]);
-            else await sendCommand([0x05, 0x00, 0x07, 0x80, SIGNS[idx].buffer]);
-        }
+    async function setBrightness(v) {
+      document.getElementById('brightVal').textContent = v;
+      await sendCommand([0x05, 0x00, 0x04, 0x80, parseInt(v)]);
+    }
 
-        function drawPreview(sign) {
-            const ctx = document.getElementById('previewCanvas').getContext('2d');
-            ctx.fillStyle = sign.color; ctx.fillRect(0,0,160,160);
-            ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-            ctx.font = 'bold 30px Arial';
-            if (sign.text.includes(' ')) {
-                const w = sign.text.split(' ');
-                ctx.fillText(w[0], 80, 60); ctx.fillText(w[1], 80, 100);
-            } else ctx.fillText(sign.text, 80, 80);
-        }
+    function showMain() {
+      document.getElementById('splash').classList.remove('active');
+      document.getElementById('main').classList.add('active');
+    }
 
-        async function setBrightness(v) {
-            document.getElementById('brightVal').textContent = v;
-            await sendCommand([0x05, 0x00, 0x04, 0x80, parseInt(v)]);
-        }
-
-        function showMain() {
-            document.getElementById('splash').classList.remove('active');
-            document.getElementById('main').classList.add('active');
-        }
-
-        initGrid();
-    </script>
+    initGrid();
+  </script>
 </body>
 </html>
