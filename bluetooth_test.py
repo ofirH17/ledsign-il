@@ -52,8 +52,9 @@ async def test_connection(address):
                     print(f"❌ Direct write failed: {write_error}")
                     return False
             
-                        print(f"\n🎯 Found {len(list(services))} services:")
-            for service in services:
+                                    service_list = list(services)
+                                print(f"\n🎯 Found {len(service_list)} services:")
+                        for service in service_list:
                 print(f"\nService: {service.uuid}")
                 print(f"  Description: {service.description}")
                 
