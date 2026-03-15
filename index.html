@@ -19,31 +19,37 @@
     .connecting { color: #90caf9; margin-top: 12px; font-size: 13px; }
     .results { margin-top: 16px; background: rgba(76,175,80,0.1); border: 1px solid #4caf50; border-radius: 8px; padding: 14px; text-align: right; }
     .results h3 { color: #4caf50; margin-bottom: 10px; font-size: 15px; }
-    .results pre { background: #000; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 10px; direction: ltr; text-align: left; line-height: 1.4; max-height: 350px; overflow-y: auto; white-space: pre-wrap; }
+    .results pre { background: #000; padding: 10px; border-radius: 4px; overflow-x: auto; font-size: 10px; direction: ltr; text-align: left; line-height: 1.4; max-height: 400px; overflow-y: auto; white-space: pre-wrap; }
     .warn { background: rgba(255,152,0,0.1); border: 1px solid #ff9800; border-radius: 8px; padding: 10px; margin-top: 12px; font-size: 12px; color: #ffcc80; }
+    .info { background: rgba(33,150,243,0.1); border: 1px solid #2196f3; border-radius: 8px; padding: 10px; margin-top: 8px; font-size: 11px; color: #90caf9; text-align: right; }
   </style>
 </head>
 <body>
   <div id="splash">
     <div class="splash-content">
-      <div class="logo">💡</div>
+      <div class="logo">&#x1F4A1;</div>
       <h1>LedSign IL</h1>
-      <p class="tagline">אבחון BLE - גילוי UUIDs</p>
+      <p class="tagline">אבחון מסך - גילוי UUIDs</p>
 
-      <button id="diagnosticBtn" onclick="runDiagnostic()">🔍 אבחן מסך LED</button>
+      <button id="diagnosticBtn" onclick="runDiagnostic()">&#x1F50D; אבחן מסך LED</button>
+
+      <div id="infoBox" class="info">
+        <strong>מצב אבחון:</strong><br>
+        כפתור זה יחבר למסך ה-LED ויציג את כל ה-UUIDs שהמכשיר מפרסם.<br><br>
+        לחץ על הכפתור, בחר את המסך שלך מהרשימה, והמערכת תציג את המידע הטכני הנדרש.
+      </div>
 
       <div id="connectingMsg" class="connecting hidden">מחפש...</div>
       <div id="errorMsg" class="error hidden"></div>
       <div id="results" class="results hidden"></div>
     </div>
   </div>
-
   <script>
-    // ALL possible service UUIDs - including FFE0 which is common in cheap BLE modules
-    const ALL_SERVICES = [
-      '0000ffe0-0000-1000-8000-00805f9b34fb',  // Common cheap BLE (HM-10, HC-08)
-      '0000ffe5-0000-1000-8000-00805f9b34fb',  // Some LED controllers
-      '0000fa00-0000-1000-8000-00805f9b34fb',  // iPIXEL service
+    // Known BLE service UUIDs for LED signs
+    const KNOWN_SERVICES = [
+      '0000ffe0-0000-1000-8000-00805f9b34fb',
+      '0000ffe5-0000-1000-8000-00805f9b34fb',
+      '0000fa00-0000-1000-8000-00805f9b34fb',
       '0000fa01-0000-1000-8000-00805f9b34fb',
       '0000fa02-0000-1000-8000-00805f9b34fb',
       '0000fa03-0000-1000-8000-00805f9b34fb',
@@ -55,7 +61,9 @@
       '0000fff5-0000-1000-8000-00805f9b34fb',
       '0000ffd0-0000-1000-8000-00805f9b34fb',
       '0000ffd5-0000-1000-8000-00805f9b34fb',
-      '6e400001-b5a3-f393-e0a9-e50e24dcca9e',  // Nordic UART
+      '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+      '0000fee7-0000-1000-8000-00805f9b34fb',
+      '0000fee9-0000-1000-8000-00805f9b34fb',
     ];
 
     async function runDiagnostic() {
@@ -63,83 +71,102 @@
       const errEl = document.getElementById('errorMsg');
       const connEl = document.getElementById('connectingMsg');
       const resultsEl = document.getElementById('results');
+      const infoBox = document.getElementById('infoBox');
 
       btn.disabled = true;
       errEl.classList.add('hidden');
       resultsEl.classList.add('hidden');
+      infoBox.classList.add('hidden');
       connEl.classList.remove('hidden');
       connEl.textContent = 'בחר מסך מהרשימה...';
 
       try {
         const device = await navigator.bluetooth.requestDevice({
           acceptAllDevices: true,
-          optionalServices: ALL_SERVICES
+          optionalServices: KNOWN_SERVICES
         });
 
-        connEl.textContent = 'מתחבר ל-' + device.name + '...';
+        connEl.textContent = 'מתחבר ל-' + (device.name || 'מכשיר לא ידוע') + '...';
         const server = await device.gatt.connect();
         connEl.textContent = 'סורק שירותים...';
 
-        let output = `<h3>🔌 מכשיר: ${device.name}</h3>`;
-        let log = `Device: ${device.name}\nID: ${device.id}\n\n`;
+        let log = 'Device: ' + (device.name || 'UNKNOWN') + '\n';
+        log += 'ID: ' + device.id + '\n\n';
 
-        // Try getPrimaryServices first
+        // Step 1: try getPrimaryServices() with no args
         let services = [];
         try {
           services = await server.getPrimaryServices();
-          log += `getPrimaryServices() returned: ${services.length} services\n\n`;
+          log += 'getPrimaryServices(): ' + services.length + ' services found\n\n';
         } catch(e) {
-          log += `getPrimaryServices() error: ${e.message}\n\n`;
+          log += 'getPrimaryServices() failed: ' + e.message + '\n';
+          log += '(This is normal in Chrome - trying UUIDs one by one)\n\n';
         }
 
         if (services.length > 0) {
-          log += `=== ALL SERVICES ===\n`;
+          log += '=== SERVICES ===\n';
           for (const svc of services) {
-            log += `\nSERVICE: ${svc.uuid}\n`;
+            log += '\nSERVICE: ' + svc.uuid + '\n';
             try {
               const chars = await svc.getCharacteristics();
               for (const c of chars) {
-                let props = [];
+                const props = [];
                 if (c.properties.read) props.push('READ');
                 if (c.properties.write) props.push('WRITE');
                 if (c.properties.writeWithoutResponse) props.push('WRITE_NO_RESP');
                 if (c.properties.notify) props.push('NOTIFY');
-                log += `  CHAR: ${c.uuid} [${props.join(', ')}]\n`;
+                if (c.properties.indicate) props.push('INDICATE');
+                log += '  CHAR: ' + c.uuid + ' [' + props.join(', ') + ']\n';
               }
             } catch(e) {
-              log += `  (error getting chars: ${e.message})\n`;
+              log += '  (chars error: ' + e.message + ')\n';
             }
           }
         } else {
-          // Try each known service UUID directly
-          log += `getPrimaryServices() empty - trying known UUIDs directly:\n\n`;
-          for (const uuid of ALL_SERVICES) {
+          // Step 2: probe each UUID one by one
+          log += '=== PROBING KNOWN UUIDs ONE BY ONE ===\n';
+          let found = 0;
+          for (const uuid of KNOWN_SERVICES) {
             try {
               const svc = await server.getPrimaryService(uuid);
-              log += `\n✅ FOUND SERVICE: ${uuid}\n`;
-              const chars = await svc.getCharacteristics();
-              for (const c of chars) {
-                let props = [];
-                if (c.properties.read) props.push('READ');
-                if (c.properties.write) props.push('WRITE');
-                if (c.properties.writeWithoutResponse) props.push('WRITE_NO_RESP');
-                if (c.properties.notify) props.push('NOTIFY');
-                log += `  CHAR: ${c.uuid} [${props.join(', ')}]\n`;
+              found++;
+              log += '\n[FOUND] ' + uuid + '\n';
+              try {
+                const chars = await svc.getCharacteristics();
+                for (const c of chars) {
+                  const props = [];
+                  if (c.properties.read) props.push('READ');
+                  if (c.properties.write) props.push('WRITE');
+                  if (c.properties.writeWithoutResponse) props.push('WRITE_NO_RESP');
+                  if (c.properties.notify) props.push('NOTIFY');
+                  if (c.properties.indicate) props.push('INDICATE');
+                  log += '  CHAR: ' + c.uuid + ' [' + props.join(', ') + ']\n';
+                }
+              } catch(e2) {
+                log += '  (chars error: ' + e2.message + ')\n';
               }
             } catch(e) {
-              log += `❌ ${uuid}: not found\n`;
+              // Service not found - skip silently
             }
+          }
+          if (found === 0) {
+            log += '\nNone of the known UUIDs matched.\n';
+            log += 'The device may use a proprietary UUID not in our list.\n';
+            log += '\nTIP: Install nRF Connect app on your phone and scan\nthe device to see ALL advertised service UUIDs.\n';
+          } else {
+            log += '\n=== FOUND ' + found + ' SERVICE(S) ===';
           }
         }
 
-        output += `<pre>${log}</pre>`;
-        resultsEl.innerHTML = output;
+        const h3 = '<h3>&#x1F50C; מכשיר: ' + (device.name || 'UNKNOWN') + '</h3>';
+        resultsEl.innerHTML = h3 + '<pre>' + log + '</pre>';
         resultsEl.classList.remove('hidden');
-        device.gatt.disconnect();
+        try { device.gatt.disconnect(); } catch(e) {}
 
       } catch(e) {
         errEl.textContent = 'שגיאה: ' + e.message;
         errEl.classList.remove('hidden');
+        infoBox.classList.remove('hidden');
       } finally {
         btn.disabled = false;
         connEl.classList.add('hidden');
