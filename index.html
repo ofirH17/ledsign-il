@@ -27,7 +27,7 @@
     .sign-icon { font-size: 36px; margin-bottom: 8px; }
     .brightness-section { padding: 16px 20px; border-top: 1px solid #1a1a1a; }
     input[type=range] { width: 100%; accent-color: #4fc3f7; }
-    .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; font-size: 13px; }
+    .error { color: #f44336; margin-top: 16px; background: rgba(244,67,54,0.1); padding: 12px; border-radius: 8px; font-size: 12px; word-break: break-all; }
     .hidden { display: none !important; }
     .connecting { color: #90caf9; margin-top: 16px; font-size: 14px; }
   </style>
@@ -39,7 +39,7 @@
       <h1>LedSign IL</h1>
       <p class="tagline">שלטי LED חכמים לרכב</p>
       <button id="connectBtn" onclick="connectBLE()">🔵 חבר למסך</button>
-      <div id="connectingMsg" class="connecting hidden">מתחבר... אנא המתן</div>
+      <div id="connectingMsg" class="connecting hidden">מתחבר...</div>
       <div id="errorMsg" class="error hidden"></div>
     </div>
   </div>
@@ -61,8 +61,20 @@
   </div>
 
   <script>
-    // UUID of the WRITE characteristic (known from protocol docs)
-    const UUID_WRITE = '0000fa02-0000-1000-8000-00805f9b34fb';
+    const UUID_WRITE  = '0000fa02-0000-1000-8000-00805f9b34fb';
+    const UUID_NOTIFY = '0000fa03-0000-1000-8000-00805f9b34fb';
+
+    // All known iPIXEL service UUIDs - must ALL be listed in optionalServices
+    const ALL_KNOWN_SERVICES = [
+      '0000fa00-0000-1000-8000-00805f9b34fb',
+      '0000fa01-0000-1000-8000-00805f9b34fb',
+      '0000fa02-0000-1000-8000-00805f9b34fb',
+      '0000fa03-0000-1000-8000-00805f9b34fb',
+      '0000fff0-0000-1000-8000-00805f9b34fb',
+      '0000ffe0-0000-1000-8000-00805f9b34fb',
+      '0000ffe5-0000-1000-8000-00805f9b34fb',
+      '6e400001-b5a3-f393-e0a9-e50e24dcca9e',
+    ];
 
     const SIGNS = [
       { label: 'נהג חדש',      icon: '🅿️', color: '#e53935', text: 'נהג חדש',    buffer: 1 },
@@ -91,6 +103,47 @@
       });
     }
 
+    async function findWriteChar(server) {
+      // Strategy 1: try known service UUIDs directly
+      for (const svcUUID of ALL_KNOWN_SERVICES) {
+        try {
+          const svc = await server.getPrimaryService(svcUUID);
+          try {
+            const c = await svc.getCharacteristic(UUID_WRITE);
+            if (c) return c;
+          } catch (e) {}
+          // Also enumerate all chars in this service
+          try {
+            const chars = await svc.getCharacteristics();
+            for (const c of chars) {
+              if (c.uuid === UUID_WRITE) return c;
+            }
+          } catch (e) {}
+        } catch (e) {}
+      }
+
+      // Strategy 2: enumerate ALL services
+      try {
+        const services = await server.getPrimaryServices();
+        for (const svc of services) {
+          try {
+            const chars = await svc.getCharacteristics();
+            for (const c of chars) {
+              if (c.uuid === UUID_WRITE) return c;
+            }
+          } catch (e) {}
+        }
+        if (services.length === 0) {
+          throw new Error('המכשיר לא מפרסם שירותים. ייתכן שצריך לכבות ולהדליק את המסך, ואז לנסות שוב.');
+        }
+        // Return service UUIDs for debugging
+        const uuids = services.map(s => s.uuid).join(', ');
+        throw new Error('לא נמצא UUID fa02 בשירותים: ' + uuids);
+      } catch (e) {
+        throw e;
+      }
+    }
+
     async function connectBLE() {
       const btn = document.getElementById('connectBtn');
       const errEl = document.getElementById('errorMsg');
@@ -102,58 +155,20 @@
       connEl.textContent = 'מחפש מכשיר...';
 
       try {
-        // Request device - accept all devices, declare the write UUID as optional service
         device = await navigator.bluetooth.requestDevice({
           filters: [
             { namePrefix: 'LED_BLE_' },
             { namePrefix: 'iPixel' },
             { namePrefix: 'LED_' }
           ],
-          optionalServices: [UUID_WRITE]
+          optionalServices: ALL_KNOWN_SERVICES
         });
 
         connEl.textContent = 'מתחבר ל-' + device.name + '...';
-
-        // Connect to GATT server
         const server = await device.gatt.connect();
 
-        connEl.textContent = 'מחפש שירותים...';
-
-        // Discover ALL services (no UUID filter)
-        const services = await server.getPrimaryServices();
-
-        // Find the characteristic by UUID across all services
-        writeChar = null;
-        for (const service of services) {
-          try {
-            const chars = await service.getCharacteristics();
-            for (const char of chars) {
-              if (char.uuid === UUID_WRITE) {
-                writeChar = char;
-                break;
-              }
-            }
-            if (writeChar) break;
-          } catch (e) {
-            // Try next service
-          }
-        }
-
-        // Fallback: try direct access if discovered via optionalServices
-        if (!writeChar) {
-          for (const service of services) {
-            try {
-              writeChar = await service.getCharacteristic(UUID_WRITE);
-              if (writeChar) break;
-            } catch (e) {
-              // Try next service
-            }
-          }
-        }
-
-        if (!writeChar) {
-          throw new Error('לא נמצא ה-characteristic. UUID: ' + UUID_WRITE + ' | שירותים שנמצאו: ' + services.map(s => s.uuid).join(', '));
-        }
+        connEl.textContent = 'מחפש characteristic...';
+        writeChar = await findWriteChar(server);
 
         device.addEventListener('gattserverdisconnected', onDisconnected);
         document.getElementById('deviceName').textContent = device.name;
@@ -173,16 +188,7 @@
       writeChar = null;
       try {
         const server = await device.gatt.connect();
-        const services = await server.getPrimaryServices();
-        for (const service of services) {
-          try {
-            const chars = await service.getCharacteristics();
-            for (const char of chars) {
-              if (char.uuid === UUID_WRITE) { writeChar = char; break; }
-            }
-            if (writeChar) break;
-          } catch (e) {}
-        }
+        writeChar = await findWriteChar(server);
       } catch (e) {
         document.getElementById('errorMsg').textContent = 'החיבור נותק: ' + e.message;
         document.getElementById('errorMsg').classList.remove('hidden');
@@ -194,8 +200,7 @@
 
     function disconnect() {
       if (device && device.gatt.connected) device.gatt.disconnect();
-      writeChar = null;
-      device = null;
+      writeChar = null; device = null;
       document.getElementById('connectBtn').disabled = false;
       document.getElementById('splash').classList.add('active');
       document.getElementById('main').classList.remove('active');
@@ -206,20 +211,11 @@
       try {
         if (!device.gatt.connected) {
           const server = await device.gatt.connect();
-          const services = await server.getPrimaryServices();
-          for (const service of services) {
-            try {
-              const chars = await service.getCharacteristics();
-              for (const char of chars) {
-                if (char.uuid === UUID_WRITE) { writeChar = char; break; }
-              }
-              if (writeChar) break;
-            } catch (e) {}
-          }
+          writeChar = await findWriteChar(server);
         }
         await writeChar.writeValueWithoutResponse(new Uint8Array(bytes));
       } catch (e) {
-        console.warn('sendCommand error:', e.message);
+        console.warn('sendCommand:', e.message);
       }
     }
 
