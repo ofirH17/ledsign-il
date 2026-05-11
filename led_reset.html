@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>LED Reset Tool</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0D0D14;color:#EFEFEF;font-family:Arial,sans-serif;padding:20px;max-width:400px;margin:0 auto;}
+h1{color:#FFD600;font-size:18px;margin-bottom:4px;}
+.sub{font-size:11px;color:#555;margin-bottom:20px;}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:700;border:1.5px solid;cursor:pointer;margin-bottom:16px;}
+.badge.off{color:#FF7070;border-color:rgba(255,91,91,.45);background:rgba(255,91,91,.1);}
+.badge.on{color:#3DDB8A;border-color:rgba(61,219,138,.4);background:rgba(61,219,138,.08);}
+.dot{width:7px;height:7px;border-radius:50%;}
+.badge.off .dot{background:#FF5B5B;}
+.badge.on .dot{background:#3DDB8A;}
+.section{margin-bottom:16px;}
+.sec-title{font-size:10px;color:#555;letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px;}
+.btn{width:100%;padding:13px;border-radius:12px;border:none;font-size:14px;font-weight:700;cursor:pointer;margin-bottom:8px;transition:opacity .15s;}
+.btn:active{opacity:.75;}
+.btn:disabled{opacity:.3;cursor:not-allowed;}
+.btn-red{background:#FF5B5B;color:#fff;}
+.btn-yellow{background:#FFD600;color:#000;}
+.btn-blue{background:#4B8BFF;color:#fff;}
+.btn-gray{background:#1D1D2A;color:#EFEFEF;border:1px solid #2a2a3a;}
+.log{background:#000;color:#3DDB8A;font-family:monospace;font-size:10px;padding:10px;border-radius:10px;height:180px;overflow-y:auto;white-space:pre-wrap;line-height:1.5;direction:ltr;text-align:left;border:1px solid #1D1D2A;}
+.log .err{color:#FF5B5B;}
+.log .ok{color:#3DDB8A;}
+.log .info{color:#FFD600;}
+</style>
+</head>
+<body>
+
+<h1>🔧 LED Reset Tool</h1>
+<div class="sub">כלי איפוס מצב מסך LED</div>
+
+<div id="conn-badge" class="badge off" onclick="toggleBLE()">
+  <div class="dot"></div>
+  <span id="conn-text">התחבר ל-LED</span>
+</div>
+
+<div class="section">
+  <div class="sec-title">⚡ הדלקת מסך — נסה קודם!</div>
+  <button class="btn" id="btn-poweron" onclick="powerOn()" disabled style="background:#C96FFF;color:#fff;font-size:15px;">🔌 POWER ON + שלח תמונה</button>
+</div>
+
+<div class="section">
+  <div class="sec-title">🔴 איפוס מצב</div>
+  <button class="btn btn-red" id="btn-exit-demo" onclick="exitDemoMode()" disabled>יציאה מ-Demo Mode</button>
+  <button class="btn btn-red" id="btn-clear-flash" onclick="clearFlash()" disabled>נסה לנקות Flash</button>
+</div>
+
+<div class="section">
+  <div class="sec-title">🟡 שלח תמונה ריקה</div>
+  <button class="btn btn-yellow" id="btn-black" onclick="sendBlack()" disabled>מסך שחור (override)</button>
+  <button class="btn btn-yellow" id="btn-white" onclick="sendSolid('#FFFFFF')" disabled>מסך לבן</button>
+</div>
+
+<div class="section">
+  <div class="sec-title">🔵 פקודות כלליות</div>
+  <button class="btn btn-blue" id="btn-bright" onclick="resetBrightness()" disabled>איפוס בהירות (מקס)</button>
+  <button class="btn btn-blue" id="btn-reset-dev" onclick="resetDevice()" disabled>🔄 Reset מכשיר (iDotMatrix)</button>
+  <button class="btn btn-gray" id="btn-off" onclick="turnOff()" disabled>כבה מסך</button>
+</div>
+
+<div class="section">
+  <div class="sec-title">📋 לוג</div>
+  <div class="log" id="log"></div>
+</div>
+
+<script>
+const BLE_SVC='000000fa-0000-1000-8000-00805f9b34fb';
+const BLE_WR='0000fa02-0000-1000-8000-00805f9b34fb';
+const BLE_NO='0000fa03-0000-1000-8000-00805f9b34fb';
+const W=32,H=32;
+let bleDevice=null,bleChar=null,bleNotify=null,isConn=false;
+
+function log(msg,type=''){
+  const el=document.getElementById('log');
+  const t=new Date().toLocaleTimeString('he-IL').split(' ')[0];
+  const line=document.createElement('div');
+  line.className=type;
+  line.textContent=t+': '+msg;
+  el.appendChild(line);
+  el.scrollTop=el.scrollHeight;
+}
+
+function setConn(v){
+  isConn=v;
+  document.getElementById('conn-badge').className='badge '+(v?'on':'off');
+  document.getElementById('conn-text').textContent=v?'מחובר — לחץ לניתוק':'התחבר ל-LED';
+  document.querySelectorAll('button').forEach(b=>b.disabled=!v);
+}
+
+async function toggleBLE(){
+  if(isConn){bleDevice?.gatt?.disconnect();setConn(false);return;}
+  if(!navigator.bluetooth){alert('נדרש Chrome + HTTPS');return;}
+  try{
+    log('מחפש מכשיר...','info');
+    bleDevice=await navigator.bluetooth.requestDevice({filters:[{namePrefix:'LED_BLE'}],optionalServices:[BLE_SVC]});
+    bleDevice.addEventListener('gattserverdisconnected',()=>{setConn(false);log('ניתוק','err');});
+    const srv=await bleDevice.gatt.connect();
+    const svc=await srv.getPrimaryService(BLE_SVC);
+    bleChar=await svc.getCharacteristic(BLE_WR);
+    bleNotify=await svc.getCharacteristic(BLE_NO);
+    await bleNotify.startNotifications();
+    bleNotify.addEventListener('characteristicvaluechanged',e=>{
+      const v=new Uint8Array(e.target.value.buffer);
+      log('← ACK: ['+Array.from(v).map(x=>x.toString(16).padStart(2,'0')).join(' ')+']','ok');
+    });
+    setConn(true);
+    log('מחובר: '+bleDevice.name,'ok');
+  }catch(e){log('שגיאה: '+e.message,'err');}
+}
+
+async function send(bytes,label){
+  if(!bleChar)return;
+  try{
+    await bleChar.writeValueWithoutResponse(new Uint8Array(bytes));
+    log('→ '+label+': ['+bytes.map(x=>x.toString(16).padStart(2,'0')).join(' ')+']','ok');
+  }catch(e){log('שגיאת שליחה: '+e.message,'err');}
+}
+
+async function powerOn(){
+  log('--- POWER ON sequence (v2 — old protocol) ---','info');
+  // POWER_ON
+  await send([0x05,0x00,0x07,0x01,0x01],'POWER_ON');
+  await delay(200);
+  // Brightness max (from old working version)
+  await send([0x05,0x00,0x04,0x80,100],'brightness');
+  await delay(200);
+  // Send solid red image using OLD protocol (20-byte chunks, show=[05,00,07,80,01])
+  log('שולח תמונה אדומה (פרוטוקול ישן)...','info');
+  await sendSolidOldProtocol('#FF0000');
+}
+
+async function sendSolidOldProtocol(color){
+  try{
+    const ds=document.createElement('canvas');ds.width=W;ds.height=H;
+    const ctx=ds.getContext('2d');
+    const id=ctx.createImageData(W,H);
+    const hex=color.replace('#','');
+    const r=parseInt(hex,16)>>16,g=(parseInt(hex,16)>>8)&255,b=parseInt(hex,16)&255;
+    for(let i=0;i<W*H;i++){id.data[i*4]=r;id.data[i*4+1]=g;id.data[i*4+2]=b;id.data[i*4+3]=255;}
+    ctx.putImageData(id,0,0);
+    const blob=await new Promise(r=>ds.toBlob(r,'image/png'));
+    const pngBytes=new Uint8Array(await blob.arrayBuffer());
+    const size=pngBytes.length;
+    const crc=crc32(pngBytes);
+    log('PNG: '+size+' bytes (old protocol)','info');
+    // Old packet structure
+    const headerSize=2+2+1+4+4+1+1;
+    const totalLen=headerSize+size;
+    const packet=new Uint8Array(totalLen);
+    let i=0;
+    packet[i++]=totalLen&0xFF;packet[i++]=(totalLen>>8)&0xFF;
+    packet[i++]=0x02;packet[i++]=0x00;packet[i++]=0x00;
+    packet[i++]=size&0xFF;packet[i++]=(size>>8)&0xFF;packet[i++]=(size>>16)&0xFF;packet[i++]=(size>>24)&0xFF;
+    packet[i++]=crc&0xFF;packet[i++]=(crc>>8)&0xFF;packet[i++]=(crc>>16)&0xFF;packet[i++]=(crc>>24)&0xFF;
+    packet[i++]=0x00;packet[i++]=0x01; // slot 1
+    packet.set(pngBytes,i);
+    // Send in 20-byte chunks (old protocol)
+    const CHUNK=20;
+    const total=Math.ceil(packet.length/CHUNK);
+    for(let off=0;off<packet.length;off+=CHUNK){
+      await bleChar.writeValueWithoutResponse(packet.slice(off,Math.min(off+CHUNK,packet.length)));
+      log('chunk '+(Math.floor(off/CHUNK)+1)+'/'+total);
+      await delay(50);
+    }
+    await delay(500);
+    // Old show command
+    await send([0x05,0x00,0x07,0x80,0x01],'show-old');
+    log('סיים (פרוטוקול ישן) ✓','ok');
+  }catch(e){log('שגיאה: '+e.message,'err');}
+}
+
+async function exitDemoMode(){
+  log('--- יציאה מ-Demo Mode ---','info');
+  // Reverse of [05 00 07 01 00] — try 0x00 instead of 0x01
+  await send([0x05,0x00,0x07,0x00,0x00],'exit-demo v1');
+  await delay(300);
+  await send([0x05,0x00,0x00,0x00,0x00],'exit-demo v2');
+  await delay(300);
+  await send([0x05,0x01,0x00,0x00,0x00],'exit-demo v3');
+  log('נשלחו פקודות — בדוק מסך','info');
+}
+
+async function clearFlash(){
+  log('--- ניסיון ניקוי Flash ---','info');
+  // Try various "reset stored image" commands
+  await send([0x06,0x00,0x00,0x00],'clear v1');
+  await delay(300);
+  await send([0x09,0x00,0x00,0x00],'clear v2');
+  await delay(300);
+  await send([0x0A,0x00,0x00,0x00],'clear v3');
+  log('בדוק את מצב המסך','info');
+}
+
+async function sendSolid(color){
+  log('--- שולח צבע אחיד: '+color+' ---','info');
+  const pxs=new Array(W*H).fill(color);
+  await sendPixels(pxs);
+}
+
+async function sendBlack(){await sendSolid('#000000');}
+
+async function sendPixels(pxs){
+  try{
+    const ds=document.createElement('canvas');ds.width=W;ds.height=H;
+    const ctx=ds.getContext('2d');
+    const id=ctx.createImageData(W,H);
+    for(let i=0;i<W*H;i++){
+      const hex=(pxs[i]||'#000000').replace('#','');
+      id.data[i*4]=parseInt(hex,16)>>16;
+      id.data[i*4+1]=(parseInt(hex,16)>>8)&255;
+      id.data[i*4+2]=parseInt(hex,16)&255;
+      id.data[i*4+3]=255;
+    }
+    ctx.putImageData(id,0,0);
+    const blob=await new Promise(r=>ds.toBlob(r,'image/png'));
+    const pngBytes=new Uint8Array(await blob.arrayBuffer());
+    const size=pngBytes.length;
+    const crc=crc32(pngBytes);
+    log('PNG: '+size+' bytes','info');
+    const dv=new DataView(new ArrayBuffer(8));
+    dv.setUint32(0,size,true);dv.setUint32(4,crc,true);
+    const frame=new Uint8Array(3+4+4+2+size);
+    frame[0]=0x02;frame[1]=0x00;frame[2]=0x00;
+    frame.set(new Uint8Array(dv.buffer,0,4),3);
+    frame.set(new Uint8Array(dv.buffer,4,4),7);
+    frame[11]=0x00;frame[12]=0x01;
+    frame.set(pngBytes,13);
+    const msg=new Uint8Array(2+frame.length);
+    new DataView(msg.buffer).setUint16(0,2+frame.length,true);
+    msg.set(frame,2);
+    const CHUNK=244;
+    for(let i=0;i<msg.length;i+=CHUNK){
+      await bleChar.writeValueWithResponse(msg.slice(i,Math.min(i+CHUNK,msg.length)));
+      log('chunk '+(Math.floor(i/CHUNK)+1)+'/'+Math.ceil(msg.length/CHUNK));
+    }
+    log('chunks שלמו — שולח show','info');
+    await delay(200);
+    await send([0x07,0x00,0x08,0x80,0x01,0x00,0x01],'show');
+    log('סיים ✓','ok');
+  }catch(e){log('שגיאה: '+e.message,'err');}
+}
+
+async function resetBrightness(){
+  log('--- איפוס בהירות ---','info');
+  // Try brightness=max (15/15)
+  await send([0x08,0x00,0x01,0x0F],'brightness max');
+}
+
+async function turnOff(){
+  await send([0x05,0x00,0x07,0x01,0x00],'turn-off');
+}
+
+async function resetDevice(){
+  log('--- Reset מכשיר (from iDotMatrix library) ---','info');
+  await send([0x04,0x00,0x03,0x80],'freeze-screen');
+  await delay(300);
+  await send([0x05,0x00,0x04,0x80,0x50],'brightness-reset');
+  log('Reset נשלח — המתן 2 שניות ואז נסה POWER ON','info');
+}
+
+function delay(ms){return new Promise(r=>setTimeout(r,ms));}
+
+function crc32(buf){
+  let c,crc=0xFFFFFFFF;
+  if(!crc32.t){crc32.t=new Uint32Array(256);for(let i=0;i<256;i++){c=i;for(let j=0;j<8;j++)c=c&1?0xEDB88320^(c>>>1):c>>>1;crc32.t[i]=c;}}
+  for(let i=0;i<buf.length;i++)crc=crc32.t[(crc^buf[i])&0xFF]^(crc>>>8);
+  return(crc^0xFFFFFFFF)>>>0;
+}
+
+log('מוכן. התחבר ל-LED כדי להתחיל.','info');
+</script>
+</body>
+</html>

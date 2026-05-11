@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>iPIXEL Editor</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:#0D0D14;color:#EFEFEF;font-family:Arial,sans-serif;display:flex;flex-direction:column;align-items:center;padding:12px;gap:8px;min-height:100vh;}
+h1{font-size:14px;color:#FFD600;letter-spacing:.1em;}
+.row{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;}
+.btn{padding:5px 11px;border-radius:7px;border:1px solid #2a2a3a;background:#1D1D2A;color:#EFEFEF;cursor:pointer;font-size:11px;}
+.btn:hover{background:#2a2a3a;}
+.btn.on{border-color:#FFD600;color:#FFD600;}
+.swatch{width:24px;height:24px;border-radius:6px;cursor:pointer;border:2px solid transparent;display:inline-block;}
+.swatch.on{border-color:#FFD600;}
+canvas{display:block;cursor:crosshair;touch-action:none;}
+label{font-size:10px;color:#666;}
+input[type=range]{width:90px;accent-color:#FFD600;vertical-align:middle;}
+textarea{width:100%;max-width:540px;height:64px;background:#1D1D2A;border:1px solid #2a2a3a;color:#3DDB8A;font-size:10px;padding:6px;border-radius:8px;font-family:monospace;resize:vertical;}
+.sep{width:1px;height:18px;background:#2a2a3a;margin:0 2px;}
+.ref-panel{padding:6px 10px;background:#13131E;border-radius:10px;border:1px solid #1D1D2A;display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:center;}
+</style>
+</head>
+<body>
+<h1>iPIXEL PIXEL EDITOR — 32×32</h1>
+
+<div class="row">
+  <button class="btn on" id="btn-draw" onclick="setMode('draw')">✏️</button>
+  <button class="btn" id="btn-erase" onclick="setMode('erase')">⬜</button>
+  <button class="btn" id="btn-fill" onclick="setMode('fill')">🪣</button>
+  <div class="sep"></div>
+  <span class="swatch on" style="background:#ffffff" onclick="setColor('#ffffff',this)"></span>
+  <span class="swatch" style="background:#FFD600" onclick="setColor('#FFD600',this)"></span>
+  <span class="swatch" style="background:#FF3333" onclick="setColor('#FF3333',this)"></span>
+  <span class="swatch" style="background:#00CC44" onclick="setColor('#00CC44',this)"></span>
+  <span class="swatch" style="background:#3366FF" onclick="setColor('#3366FF',this)"></span>
+  <span class="swatch" style="background:#000000;border-color:#444;" onclick="setColor('#000000',this)"></span>
+  <input type="color" value="#ffffff" title="צבע מותאם" oninput="setColor(this.value)" style="width:24px;height:24px;padding:0;border:none;border-radius:6px;cursor:pointer;">
+  <div class="sep"></div>
+  <label>רקע <input type="color" value="#003399" id="bg-color" oninput="bgColor=this.value;render();" style="width:24px;height:24px;padding:0;border:none;border-radius:6px;vertical-align:middle;cursor:pointer;"></label>
+</div>
+
+<div class="ref-panel">
+  <button class="btn" onclick="document.getElementById('upf').click()">📂 טען רפרנס</button>
+  <input id="upf" type="file" accept="image/*" style="display:none" onchange="loadRef(this)">
+  <label>שקיפות <input type="range" min="0" max="100" value="35" id="sl-op" oninput="render()"> <b id="vop">35%</b></label>
+  <label>גודל <input type="range" min="5" max="200" value="100" id="sl-sc" oninput="render()"> <b id="vsc">100%</b></label>
+  <label>X <input type="range" min="-250" max="250" value="0" id="sl-x" oninput="render()"></label>
+  <label>Y <input type="range" min="-250" max="250" value="0" id="sl-y" oninput="render()"></label>
+  <button class="btn" onclick="autoFit()">⊡ פיט</button>
+  <button class="btn" onclick="refImg=null;render()">✕</button>
+</div>
+
+<canvas id="c" width="512" height="512"></canvas>
+
+<div class="row">
+  <canvas id="p32" width="32" height="32" style="width:64px;height:64px;border:1px solid #1D1D2A;image-rendering:pixelated;cursor:default;"></canvas>
+  <canvas id="p160" width="160" height="160" style="width:160px;height:160px;border:1px solid #1D1D2A;image-rendering:pixelated;cursor:default;"></canvas>
+</div>
+
+<div class="row">
+  <button class="btn" onclick="undo()">↩️ ביטול</button>
+  <button class="btn" onclick="clearAll()">🗑️ נקה</button>
+  <div class="sep"></div>
+  <button class="btn" onclick="exportJS()">📋 ייצא JS</button>
+  <button class="btn" onclick="exportJSON()">📋 JSON</button>
+  <button class="btn" onclick="importJSON()">📥 ייבא</button>
+</div>
+<textarea id="out" placeholder="פלט ייצוא..."></textarea>
+
+<script>
+const C=32,CELL=16;
+let pxs=new Array(C*C).fill(null);
+let bgColor='#003399',drawColor='#ffffff',mode='draw';
+let isDown=false,hist=[],refImg=null;
+const cv=document.getElementById('c');
+const ctx=cv.getContext('2d');
+
+function setMode(m){mode=m;['draw','erase','fill'].forEach(x=>document.getElementById('btn-'+x).classList.toggle('on',x===m));}
+function setColor(c,el){drawColor=c;document.querySelectorAll('.swatch').forEach(s=>s.classList.remove('on'));if(el)el.classList.add('on');}
+
+function xy(ex,ey){
+  const r=cv.getBoundingClientRect();
+  return{x:Math.floor((ex-r.left)*(512/r.width)/CELL),y:Math.floor((ey-r.top)*(512/r.height)/CELL)};
+}
+
+function paint(x,y){
+  if(x<0||x>=C||y<0||y>=C)return;
+  const i=y*C+x;
+  if(mode==='draw')pxs[i]=drawColor;
+  else if(mode==='erase')pxs[i]=null;
+  else if(mode==='fill')fill(x,y,pxs[i]);
+  render();
+}
+
+function fill(x,y,tgt){
+  if(tgt===drawColor)return;
+  const q=[[x,y]],seen=new Set();
+  while(q.length){
+    const[cx,cy]=q.pop(),k=cx+','+cy;
+    if(seen.has(k)||cx<0||cx>=C||cy<0||cy>=C)continue;
+    seen.add(k);
+    if(pxs[cy*C+cx]!==tgt)continue;
+    pxs[cy*C+cx]=drawColor;
+    q.push([cx+1,cy],[cx-1,cy],[cx,cy+1],[cx,cy-1]);
+  }
+}
+
+function snap(){hist.push([...pxs]);if(hist.length>50)hist.shift();}
+function undo(){if(hist.length){pxs=hist.pop();render();}}
+function clearAll(){snap();pxs=new Array(C*C).fill(null);render();}
+
+cv.addEventListener('mousedown',e=>{isDown=true;snap();const{x,y}=xy(e.clientX,e.clientY);paint(x,y);});
+cv.addEventListener('mousemove',e=>{if(!isDown)return;const{x,y}=xy(e.clientX,e.clientY);paint(x,y);});
+document.addEventListener('mouseup',()=>isDown=false);
+cv.addEventListener('touchstart',e=>{e.preventDefault();isDown=true;snap();const t=e.touches[0];const{x,y}=xy(t.clientX,t.clientY);paint(x,y);},{passive:false});
+cv.addEventListener('touchmove',e=>{e.preventDefault();if(!isDown)return;const t=e.touches[0];const{x,y}=xy(t.clientX,t.clientY);paint(x,y);},{passive:false});
+document.addEventListener('touchend',()=>isDown=false);
+
+function loadRef(inp){
+  const f=inp.files[0];if(!f)return;
+  const fr=new FileReader();
+  fr.onload=e=>{
+    const img=new Image();
+    img.onload=()=>{refImg=img;autoFit();};
+    img.src=e.target.result;
+  };
+  fr.readAsDataURL(f);
+  inp.value='';
+}
+
+function autoFit(){
+  if(!refImg)return;
+  const s=Math.min(512/refImg.width,512/refImg.height)*100;
+  document.getElementById('sl-sc').value=Math.min(200,Math.round(s));
+  document.getElementById('sl-x').value=0;
+  document.getElementById('sl-y').value=0;
+  render();
+}
+
+function render(){
+  // Background
+  ctx.fillStyle=bgColor;ctx.fillRect(0,0,512,512);
+
+  // Reference image
+  if(refImg){
+    const op=document.getElementById('sl-op').value/100;
+    const sc=document.getElementById('sl-sc').value/100;
+    const ox=parseInt(document.getElementById('sl-x').value);
+    const oy=parseInt(document.getElementById('sl-y').value);
+    document.getElementById('vop').textContent=Math.round(op*100)+'%';
+    document.getElementById('vsc').textContent=Math.round(sc*100)+'%';
+    const dw=refImg.width*sc;
+    const dh=refImg.height*sc;
+    ctx.save();
+    ctx.globalAlpha=op;
+    ctx.imageSmoothingEnabled=true;
+    ctx.drawImage(refImg,(512-dw)/2+ox,(512-dh)/2+oy,dw,dh);
+    ctx.restore();
+  }
+
+  // Pixels
+  for(let y=0;y<C;y++)for(let x=0;x<C;x++){
+    const c=pxs[y*C+x];if(c){ctx.fillStyle=c;ctx.fillRect(x*CELL,y*CELL,CELL,CELL);}
+  }
+
+  // Grid
+  ctx.strokeStyle='rgba(255,255,255,0.07)';ctx.lineWidth=0.5;
+  for(let i=0;i<=C;i++){
+    ctx.beginPath();ctx.moveTo(i*CELL,0);ctx.lineTo(i*CELL,512);ctx.stroke();
+    ctx.beginPath();ctx.moveTo(0,i*CELL);ctx.lineTo(512,i*CELL);ctx.stroke();
+  }
+
+  // Previews
+  const p=document.getElementById('p32');const pc=p.getContext('2d');
+  pc.fillStyle=bgColor;pc.fillRect(0,0,32,32);
+  for(let y=0;y<C;y++)for(let x=0;x<C;x++){const c=pxs[y*C+x];if(c){pc.fillStyle=c;pc.fillRect(x,y,1,1);}}
+  const p2=document.getElementById('p160');const pc2=p2.getContext('2d');
+  pc2.imageSmoothingEnabled=false;pc2.drawImage(p,0,0,160,160);
+}
+
+function getArr(){return pxs.map(p=>p||bgColor);}
+function exportJS(){const t=`function getSymbolArray(){\n  return ${JSON.stringify(getArr())};\n}`;document.getElementById('out').value=t;try{navigator.clipboard.writeText(t);}catch(e){}}
+function exportJSON(){const t=JSON.stringify(getArr());document.getElementById('out').value=t;try{navigator.clipboard.writeText(t);}catch(e){}}
+function importJSON(){
+  try{
+    const t=document.getElementById('out').value.trim();
+    const m=t.match(/\[[\s\S]*\]/);
+    const a=JSON.parse(m?m[0]:t);
+    if(a.length===1024){pxs=a.map(c=>c===bgColor?null:c);render();}
+    else alert('צריך 1024 פיקסלים');
+  }catch(e){alert('שגיאה: '+e.message);}
+}
+
+render();
+</script>
+</body>
+</html>
