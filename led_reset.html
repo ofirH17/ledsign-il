@@ -247,9 +247,9 @@ async function sendPixels(pxs){
 }
 
 async function resetBrightness(){
-  log('--- איפוס בהירות ---','info');
-  // Try brightness=max (15/15)
-  await send([0x08,0x00,0x01,0x0F],'brightness max');
+  log('--- איפוס בהירות (100%) ---','info');
+  // Verified format: [0x05, 0x00, 0x04, 0x80, percent]
+  await send([0x05,0x00,0x04,0x80,100],'brightness 100%');
 }
 
 async function turnOff(){

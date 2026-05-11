@@ -2200,17 +2200,16 @@ function setBrightness(pct){
   sendBrightnessBLE(pct);
 }
 async function sendBrightnessBLE(val){
-  if(!bleChar||!isConnected||bleBusy)return;
-  bleBusy=true;
-  const br = Math.round(val*15/100);
-  // Original working format: simple 4-byte command, no length header
-  const msg = new Uint8Array([0x08, 0x00, 0x01, br]);
+  if(!bleChar||!isConnected)return;
+  // Verified format from iDotMatrix protocol & old working repo:
+  // [0x05, 0x00, 0x04, 0x80, percent] where percent = 5-100
+  const pct = Math.max(5, Math.min(100, val));
+  const msg = new Uint8Array([0x05, 0x00, 0x04, 0x80, pct]);
   try{
-    log('Brightness: ' + val + '% → byte=' + br);
+    log('Brightness: ' + pct + '%');
     await bleChar.writeValueWithoutResponse(msg);
     log('Brightness OK ✓');
   } catch(e){ log('Brightness Err: ' + e.message); }
-  finally { bleBusy=false; }
 }
 function toggleAutoConnect(){
   autoConnect=!autoConnect;
